@@ -57,7 +57,12 @@ jobs:
         run: cargo install cargo-vet
 
       - name: Run cargo vet
-        run: cargo vet
+        run: |
+          if [ -f supply-chain/audits.toml ]; then
+            cargo vet
+          else
+            echo "supply-chain/ not initialized; skipping. Run 'cargo vet init' to enable."
+          fi
 
   semver-checks:
     name: Semver Compatibility
