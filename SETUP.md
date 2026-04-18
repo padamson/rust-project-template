@@ -35,6 +35,7 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 ### Code security
 
 - [ ] **Settings > Code security and analysis** (`/settings/security_analysis`): Enable:
+  - Private vulnerability reporting
   - Dependabot alerts
   - Dependabot security updates
   - Dependabot malware alerts
