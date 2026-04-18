@@ -53,10 +53,29 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 
 ## Local setup
 
-- [ ] Install prek: `cargo install prek`
-- [ ] Install hooks: `prek install`
-- [ ] Initialize cargo-vet: `cargo vet init` and import trusted audits
-- [ ] Run initial checks: `cargo build && cargo nextest run && cargo deny check`
+### Install tools
+
+```bash
+cargo install cargo-nextest cargo-audit cargo-deny cargo-vet cargo-mutants cargo-semver-checks prek
+```
+
+### Enable pre-commit hooks
+
+```bash
+prek install
+```
+
+### Verify everything works
+
+```bash
+cargo build
+cargo nextest run
+cargo deny check
+```
+
+### Initialize cargo-vet
+
+See the cargo-vet section below.
 
 ## cargo-vet initialization
 
