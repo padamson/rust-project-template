@@ -37,6 +37,7 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 - [ ] **Settings > Code security and analysis** (`/settings/security_analysis`): Enable:
   - Dependabot alerts
   - Dependabot security updates
+  - Dependabot malware alerts
   - Code scanning (CodeQL) via default setup
   - Secret scanning
   - Push protection
