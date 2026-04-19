@@ -72,6 +72,7 @@ jobs:
         run: cargo nextest run --workspace
 
       - name: Run doc-tests
+        if: hashFiles('**/src/lib.rs') != ''
         run: cargo test --doc --workspace
 
       - name: Generate documentation
