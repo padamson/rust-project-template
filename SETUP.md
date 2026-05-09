@@ -35,12 +35,13 @@ These settings cannot be configured via code and must be set in the GitHub UI.
   PR-triggered checks you can require:
 
   - `MSRV Check` — cheap; catches accidental use of post-MSRV features
+  - `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
   - `Test on ubuntu-latest` — primary CI signal
   - `Test on macos-latest` / `Test on windows-latest` — broader coverage, slower merges
   - `Security Audit`, `License & Dependency Check`, `Supply Chain Review`
   - `CodeQL`
 
-  **Solo-friendly minimum:** `MSRV Check`, `Test on ubuntu-latest`, `Security Audit`, `License & Dependency Check`, `Supply Chain Review`. **Full coverage:** add `Test on macos-latest`, `Test on windows-latest`, and `CodeQL`.
+  **Solo-friendly minimum:** `MSRV Check`, `Lint`, `Test on ubuntu-latest`, `Security Audit`, `License & Dependency Check`, `Supply Chain Review`. **Full coverage:** add `Test on macos-latest`, `Test on windows-latest`, and `CodeQL`.
 
   Either click through the UI, or apply via `gh api` (requires `admin:repo` scope — run `gh auth refresh -s admin:repo` first if needed):
 
@@ -52,6 +53,7 @@ These settings cannot be configured via code and must be set in the GitHub UI.
       "strict": true,
       "checks": [
         {"context": "MSRV Check"},
+        {"context": "Lint"},
         {"context": "Test on ubuntu-latest"},
         {"context": "Security Audit"},
         {"context": "License & Dependency Check"},
@@ -104,8 +106,12 @@ If any `cargo install` fails with a rustc version mismatch (`requires rustc X.Y.
 ### Enable pre-commit hooks
 
 ```bash
-prek install
+prek install --overwrite
 ```
+
+`--overwrite` replaces any pre-existing `.git/hooks/pre-commit` from the
+legacy Python `pre-commit`. Without it, prek keeps the old hook at
+`.git/hooks/pre-commit.legacy` and runs both — every check fires twice.
 
 ### Verify everything works
 

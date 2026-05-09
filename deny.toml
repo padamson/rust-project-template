@@ -10,6 +10,9 @@ no-default-features = false
 feature-depth = 1
 
 [advisories]
+# Source of truth for ignored RUSTSEC advisories. `cargo audit` has no
+# project-level config, so mirror this list as inline `--ignore` flags
+# in `.github/workflows/security.yml` and `.pre-commit-config.yaml`.
 ignore = []
 
 [licenses]

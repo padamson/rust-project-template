@@ -29,6 +29,11 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit
 
+      # `cargo audit` only reads ~/.cargo/audit.toml — there is no
+      # project-level config. For unfixable transitive advisories, list
+      # them in `deny.toml`'s `[advisories] ignore` (the source of truth)
+      # and mirror them here as inline flags, e.g.:
+      #   run: cargo audit --ignore RUSTSEC-2024-XXXX --ignore RUSTSEC-2025-YYYY
       - name: Run cargo audit
         run: cargo audit
 
@@ -109,6 +114,8 @@ jobs:
       - name: Install cargo-mutants
         run: cargo install cargo-mutants
 
+      # If runs are too slow, scope mutation testing via `.mutants.toml`
+      # at the repo root. See `.mutants.toml.example` in the template.
       - name: Run mutation testing
         run: cargo mutants
 

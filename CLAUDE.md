@@ -19,7 +19,7 @@ cargo vet                # supply chain review
 
 ```bash
 cargo install prek
-prek install
+prek install --overwrite   # --overwrite replaces any legacy pre-commit hook
 ```
 
 Hooks mirror CI checks: fmt, clippy, check, nextest, doctest, audit, deny, vet.
