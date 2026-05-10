@@ -131,9 +131,20 @@ After your first `cargo build`, initialize supply chain auditing:
 
 ```bash
 cargo vet init
-cargo vet import mozilla https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml
-cargo vet import google https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT
+cargo vet import bytecode-alliance
+cargo vet import embark-studios
+cargo vet import fermyon
+cargo vet import google
+cargo vet import isrg
+cargo vet import mozilla
+cargo vet import zcash
 ```
+
+`cargo vet import <name>` resolves the canonical URL for each known
+trusted org — no need to pin a URL. Together, these seven imports
+absorb the bulk of common transitive dependencies (in one dogfooding
+run on a real project they converted 142 exemptions into real audits
+without any maintainer work).
 
 If your crate has no third-party dependencies yet, `cargo vet` passes immediately with nothing to audit. The imports above pre-seed trusted audit sets so that when you add your first dependency, the audits are already in place — you can safely defer the `cargo vet import ...` commands until then.
 
@@ -143,6 +154,23 @@ Then exempt any unaudited dependencies:
 cargo vet
 # Follow the prompts to exempt crates
 ```
+
+### Per-PR workflow for unvetted entries
+
+**Never auto-regenerate exemptions in CI.** A Supply Chain Review
+failure on a Dependabot PR is the *signal* that new unvetted code is
+arriving — pause and decide before merging. Auto-regenerating
+rubber-stamps every upstream change and defeats the point of
+`cargo vet`.
+
+For each unvetted entry in a failing PR:
+
+- **`cargo vet certify <crate> <version>`** — gold standard. Read the
+  diff, attest, commit the new audit onto the PR branch.
+- **`cargo vet regenerate exemptions`** — bronze standard. Acceptable
+  for patch bumps from known publishers; not for new transitives or
+  majors. Commit the config change onto the PR branch.
+- **Reject** if the diff looks sketchy.
 
 ## Release ceremony (final step — cut vX.Y.Z)
 

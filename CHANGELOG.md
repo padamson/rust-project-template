@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Comments in `security.yml`, `.pre-commit-config.yaml`, and `deny.toml` documenting the `cargo audit --ignore` pattern keyed off `deny.toml`'s `[advisories] ignore` as source of truth
 - CLAUDE.md / SETUP.md note on `prek install --overwrite` to avoid double-firing legacy pre-commit hooks
 - MSRV-job comment on stubbing `include_bytes!` build artifacts via `touch` for downstreams that embed generated files
+- Expanded `cargo vet import` list in SETUP.md to the seven well-known trusted orgs (bytecode-alliance, embark-studios, fermyon, google, isrg, mozilla, zcash), using the named-import form
+- Per-PR workflow documentation in SETUP.md for handling Supply Chain Review failures on Dependabot PRs (never auto-regenerate exemptions in CI; certify vs. regenerate vs. reject)
 
 ### Changed
 - `test.yml` matrix (ubuntu/macos/windows) now runs only `cargo build` + `cargo nextest run`; lint and doc steps moved to the new ubuntu-only `Lint` job
