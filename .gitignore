@@ -1,6 +1,10 @@
 # Build artifacts
 /target
 
+# cargo-mutants output (current run + rotated previous run)
+/mutants.out/
+/mutants.out.old/
+
 # Environment variables (secrets, config)
 .env
 

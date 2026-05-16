@@ -24,6 +24,27 @@ prek install --overwrite   # --overwrite replaces any legacy pre-commit hook
 
 Hooks mirror CI checks: fmt, clippy, check, nextest, doctest, audit, deny, vet.
 
+## Mutation testing
+
+```bash
+./scripts/mutants.sh                 # diff HEAD~1..HEAD (default)
+./scripts/mutants.sh main            # diff main..HEAD
+./scripts/mutants.sh -- --jobs 4     # pass extra cargo-mutants args
+```
+
+`scripts/mutants.sh` wraps `cargo mutants --in-diff`, scoping mutation
+testing to just the lines a commit touched. A full-codebase run grows
+linearly with codebase size and routinely takes hours; `--in-diff`
+keeps the loop fast enough to use while the test is still warm.
+
+CI runs the per-diff variant on every push and PR (`mutation-testing-diff`
+in `security.yml`). The full-codebase job (`mutation-testing`) is
+manual-only via `workflow_dispatch` — use it for occasional audits or
+big refactors, never on a schedule.
+
+Scope the baseline with `.mutants.toml` (see `.mutants.toml.example`);
+`--in-diff` narrows from there.
+
 ## Release process
 
 1. Update version in `Cargo.toml`

@@ -148,7 +148,38 @@ without any maintainer work).
 
 If your crate has no third-party dependencies yet, `cargo vet` passes immediately with nothing to audit. The imports above pre-seed trusted audit sets so that when you add your first dependency, the audits are already in place — you can safely defer the `cargo vet import ...` commands until then.
 
-Then exempt any unaudited dependencies:
+### Transitively trust publishers your imported orgs trust
+
+Bigger leverage on top of imports. The orgs you've imported have
+already certified specific *individual* publishers. `cargo vet trust`
+extends those certifications to your tree — no first-hand audit work.
+
+Run `cargo vet suggest` to see candidates — it surfaces publishers
+already trusted by 2+ of your imported orgs. High-leverage names to
+apply by default (broadly endorsed, ship widely-used crates):
+
+```bash
+cargo vet trust --all seanmonstar    # hyper, reqwest, mime_guess, ...
+cargo vet trust --all BurntSushi     # regex, regex-syntax, csv, ...
+cargo vet trust --all epage          # clap, toml, anstream, ...
+cargo vet trust --all kennykerr      # windows-rs, windows-targets, ...
+cargo vet trust --all Lokathor       # bytemuck, ...
+```
+
+For multi-maintainer flagship packages (clap, tower, windows-*), add
+`--allow-multiple-publishers` so a release by any of the maintainers
+counts (not just the trusted one):
+
+```bash
+cargo vet trust --all epage --allow-multiple-publishers
+cargo vet trust --all seanmonstar --allow-multiple-publishers
+cargo vet trust --all kennykerr --allow-multiple-publishers
+```
+
+In dogfooding on a real project, this took **304 → 237 exemptions**
+(a further 22% reduction on top of imports) with zero audit work.
+
+Then exempt any remaining unaudited dependencies:
 
 ```bash
 cargo vet
