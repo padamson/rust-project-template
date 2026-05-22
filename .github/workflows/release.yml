@@ -44,18 +44,14 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      # `matrix.target` in shared-key prevents the two macos matrix
+      # entries (x86_64 + aarch64 Apple Darwin) from clobbering each
+      # other's cache — Swatinem's auto-key includes runner.os but not
+      # the inline --target flag.
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: release-${{ matrix.target }}
 
       - name: Install cargo-nextest & parse-changelog
         uses: taiki-e/install-action@v2

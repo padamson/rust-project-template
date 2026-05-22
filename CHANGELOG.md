@@ -19,5 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Two-job mutation-testing setup in `security.yml`: a per-push/PR `mutation-testing-diff` job using `cargo mutants --in-diff` (typical runtime seconds-to-minutes), with `fetch-depth: 0` and PR/push base resolution; and a `mutation-testing` (full) job available via manual `workflow_dispatch` only — full-codebase runs don't scale to be scheduled
 - `## Mutation testing` section in CLAUDE.md covering the local script + CI shape
 - `/mutants.out/` and `/mutants.out.old/` added to `.gitignore`
+- All Cargo cache steps in `test.yml`, `release.yml`, and `security.yml` switched from `actions/cache@v5` + manual key composition to `Swatinem/rust-cache@v2` + `shared-key`. Auto-derived key includes the rustc version (catches stale-binary panics across toolchain bumps), and pre-save cleanup keeps cache size in check. Release-job `shared-key` includes `matrix.target` so the two macOS cross-targets don't clobber each other.
 
 [Unreleased]: https://github.com/OWNER/REPO/commits/main
