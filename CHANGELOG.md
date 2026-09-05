@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- `dependabot-auto-merge.yml`: enables squash auto-merge on every Dependabot PR; the required status checks are the whole gate, since merges made with `GITHUB_TOKEN` trigger no push run on `main`
+- Dependabot `cooldown` (7/14/7/3 days for cargo, 7 for actions) so bumps arrive after the cargo-vet import sets have audited them
+- Dependabot groups for majors and for actions, plus a commented git-dependencies slot that must come first, so the weekly run opens at most four PRs and the auto-merge cascade (N PRs, O(N^2) CI runs) cannot start
+- SETUP.md: require every PR-triggered job including `Mutation Testing (diff)`, and leave "require branches to be up to date" off, with the reasoning for both
 - Initial project scaffold
 - `.mutants.toml.example` with scoping guidance to keep `cargo mutants` runs tractable on real downstreams
 - `test.yml` split: ubuntu-only `Lint` job covers fmt, clippy, doctest, and `cargo doc`; the cross-platform matrix (ubuntu/macos/windows) runs only `cargo build` + `cargo nextest run`

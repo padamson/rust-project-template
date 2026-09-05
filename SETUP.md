@@ -32,16 +32,28 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 
   **Apply protection only after the first PR has merged** — otherwise the rules block the very PR that first makes the required checks real.
 
-  PR-triggered checks you can require:
+  **Require every PR-triggered job.** The required checks are the entire
+  merge gate for Dependabot: `dependabot-auto-merge.yml` enables auto-merge
+  with `GITHUB_TOKEN`, and merges made with that token trigger no push run
+  on `main`, so nothing tests a bump after it lands. A job left off this
+  list (Supply Chain Review is the classic omission) means a bump merges
+  with that job red.
 
   - `MSRV Check` — cheap; catches accidental use of post-MSRV features
   - `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
-  - `Test on ubuntu-latest` — primary CI signal
-  - `Test on macos-latest` / `Test on windows-latest` — broader coverage, slower merges
+  - `Test on ubuntu-latest`, `Test on macos-latest`, `Test on windows-latest`
   - `Security Audit`, `License & Dependency Check`, `Supply Chain Review`
-  - `CodeQL`
+  - `Mutation Testing (diff)`
 
-  **Solo-friendly minimum:** `MSRV Check`, `Lint`, `Test on ubuntu-latest`, `Security Audit`, `License & Dependency Check`, `Supply Chain Review`. **Full coverage:** add `Test on macos-latest`, `Test on windows-latest`, and `CodeQL`.
+  **Leave "require branches to be up to date" off** (`strict: false`).
+  With it on, the second green Dependabot PR of the week is stale the moment
+  the first merges, auto-merge never updates branches, and Dependabot only
+  rebases on a conflict, so PRs sit blocked until someone clicks "update
+  branch" and every rebase re-runs CI. Off, each green PR merges once. The
+  residual risk (two green PRs that conflict semantically without
+  conflicting in git) is negligible for Dependabot: cargo PRs always collide
+  on `Cargo.lock` and get rebased and re-tested, and an actions bump beside
+  a cargo bump touches disjoint files.
 
   Either click through the UI, or apply via `gh api` (requires `admin:repo` scope — run `gh auth refresh -s admin:repo` first if needed):
 
@@ -50,14 +62,17 @@ These settings cannot be configured via code and must be set in the GitHub UI.
     --input - <<'JSON'
   {
     "required_status_checks": {
-      "strict": true,
+      "strict": false,
       "checks": [
         {"context": "MSRV Check"},
         {"context": "Lint"},
         {"context": "Test on ubuntu-latest"},
+        {"context": "Test on macos-latest"},
+        {"context": "Test on windows-latest"},
         {"context": "Security Audit"},
         {"context": "License & Dependency Check"},
-        {"context": "Supply Chain Review"}
+        {"context": "Supply Chain Review"},
+        {"context": "Mutation Testing (diff)"}
       ]
     },
     "enforce_admins": false,
