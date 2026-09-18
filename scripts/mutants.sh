@@ -9,17 +9,30 @@
 #   ./scripts/mutants.sh main                 # diff main..HEAD
 #   ./scripts/mutants.sh 0bb7329              # diff <sha>..HEAD
 #   ./scripts/mutants.sh HEAD~5               # diff last 5 commits
+#   ./scripts/mutants.sh --working            # diff uncommitted edits (working tree vs HEAD)
+#   ./scripts/mutants.sh --working main       # working tree vs main
 #   ./scripts/mutants.sh -- --jobs 4          # default base + extra cargo-mutants args
 #   ./scripts/mutants.sh main --jobs 4        # explicit base + extra args
 #
 # The first non-dash argument is the base ref; anything else (and
 # everything after the first dash-prefixed arg) passes through to
-# cargo-mutants. See https://mutants.rs/ for the full CLI surface.
+# cargo-mutants. `--working` is the one flag this script consumes
+# itself: it diffs the working tree against the base (HEAD by default)
+# instead of a ref range, so a review that pauses before committing can
+# still gate its edits.
+# `git diff HEAD` sees tracked files only; `git add -N <file>` first if
+# the change adds a new file. See https://mutants.rs/ for the full CLI
+# surface.
 #
 # Why `--in-diff`: an unscoped `cargo mutants` run grows linearly with
 # codebase size and routinely runs many hours. `--in-diff` narrows
 # mutation to just the lines in the supplied diff — typically seconds
 # to minutes for a normal commit.
+#
+# Don't run two of these at once: every cargo-mutants process writes
+# `mutants.out/`, so a second run overwrites the first one's counts. The
+# binary is `cargo-mutants` (hyphen), so a stray run is stopped with
+# `pkill -f cargo-mutants`.
 #
 # Prerequisites: `cargo install cargo-mutants` (once per machine).
 #
@@ -40,13 +53,55 @@ cd "$REPO_ROOT"
 #   touch crates/foo-viz/pkg/foo_viz.js crates/foo-viz/pkg/foo_viz_bg.wasm
 # -----------------------------------------------------------------------
 
-# Resolve the base ref: first non-dash positional arg, defaulting to
-# HEAD~1. Anything starting with `-` is treated as a cargo-mutants arg.
+# Pull `--working` out of the args wherever it sits; everything else is
+# left in place for the base-ref / passthrough handling below.
+WORKING=0
+REST=()
+for arg in "$@"; do
+  if [[ "$arg" == "--working" ]]; then
+    WORKING=1
+  else
+    REST+=("$arg")
+  fi
+done
+set -- ${REST[@]+"${REST[@]}"}
+
+# git's empty tree: diffing a root commit against it yields the whole
+# initial scaffold, so the first push of a new repo is mutation-tested
+# instead of skipped (`HEAD~1` has no parent there and `git diff` would
+# exit 128).
+EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+
+# Resolve the base ref: first non-dash positional arg. Anything starting
+# with `-` is treated as a cargo-mutants arg. A ref the user supplied
+# must resolve; a silent skip here would let a required CI check pass
+# without mutating anything (typo, force-pushed-away `before` SHA,
+# shallow clone).
 if [[ $# -gt 0 && "$1" != -* && "$1" != "--" ]]; then
   BASE="$1"
   shift
+  if ! git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null; then
+    echo "error: base ref '${BASE}' does not resolve." >&2
+    exit 1
+  fi
+elif [[ "$WORKING" -eq 1 ]]; then
+  # Working tree vs HEAD; vs the empty tree before the first commit.
+  if git rev-parse --verify --quiet HEAD >/dev/null; then
+    BASE="HEAD"
+  else
+    BASE="$EMPTY_TREE"
+  fi
 else
-  BASE="HEAD~1"
+  # HEAD~1, or the empty tree when HEAD is the root commit.
+  if ! git rev-parse --verify --quiet HEAD >/dev/null; then
+    echo "nothing committed yet — nothing to mutate (use --working to gate uncommitted edits)."
+    exit 0
+  fi
+  if git rev-parse --verify --quiet 'HEAD^1' >/dev/null; then
+    BASE="HEAD~1"
+  else
+    BASE="$EMPTY_TREE"
+  fi
 fi
 
 # `--` separator is allowed for clarity; consume it so it doesn't pass
@@ -55,16 +110,34 @@ if [[ $# -gt 0 && "$1" == "--" ]]; then
   shift
 fi
 
+LABEL="$BASE"
+if [[ "$BASE" == "$EMPTY_TREE" ]]; then
+  LABEL="empty tree (root commit)"
+fi
+
 DIFF="$(mktemp -t mutants.XXXXXX.diff)"
 trap 'rm -f "$DIFF"' EXIT
 
-git diff "${BASE}..HEAD" > "$DIFF"
+# `--no-renames` on both paths: git renders a pure `git mv` as a rename
+# with zero content lines, which `--in-diff` reads as "nothing changed"
+# and passes green without mutating the moved code.
+if [[ "$WORKING" -eq 1 ]]; then
+  RANGE="working tree vs ${LABEL}"
+  git diff "$BASE" --no-renames > "$DIFF"
+else
+  RANGE="${LABEL}..HEAD"
+  git diff "${BASE}..HEAD" --no-renames > "$DIFF"
+fi
 
 if [[ ! -s "$DIFF" ]]; then
-  echo "no diff between ${BASE} and HEAD — nothing to mutate."
-  echo "tip: commit your changes locally first, then re-run."
+  echo "no diff for ${RANGE} — nothing to mutate."
+  if [[ "$WORKING" -eq 1 ]]; then
+    echo "tip: new files are invisible to 'git diff' until 'git add -N <file>'."
+  else
+    echo "tip: commit your changes locally first, then re-run (or use --working)."
+  fi
   exit 0
 fi
 
-echo "mutating changes in ${BASE}..HEAD ($(wc -l < "$DIFF") diff lines)"
+echo "mutating changes in ${RANGE} ($(wc -l < "$DIFF") diff lines)"
 exec cargo mutants --in-diff "$DIFF" "$@"

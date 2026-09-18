@@ -6,12 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- `scripts/mutants.sh` diffs a root commit against git's empty tree, so `Mutation Testing (diff)` tests the initial scaffold instead of failing with exit 128 on a repo's first push; a user-supplied base ref that does not resolve is now a hard error rather than a silent pass
+- `scripts/mutants.sh --working` diffs uncommitted edits against `HEAD` (or a given ref), for gating a change before it is committed
+- `scripts/mutants.sh` passes `--no-renames` to `git diff`, so a `git mv` produces a mutable diff instead of a green gate over unmutated code
+- Pre-commit `cargo vet` hook: `files` regex now matches paths under `supply-chain/` (the end-anchored pattern matched nothing), and the hook skips until `cargo vet init` has run, mirroring the CI job
+- `deny.toml`: `allow-wildcard-paths = true`, so versionless path deps of `publish = false` workspace members and dev-dependencies do not trip `wildcards = "deny"`
+- CLAUDE.md: `--working` usage, the `-f <file>` trap, and the one-run-at-a-time rule for `mutants.out/`
+- `Supply Chain Review` job checks for `supply-chain/audits.toml` before installing cargo-vet, so an uninitialized repo skips in seconds instead of building the tool first
 - `dependabot-auto-merge.yml`: enables squash auto-merge on every Dependabot PR; the required status checks are the whole gate, since merges made with `GITHUB_TOKEN` trigger no push run on `main`
 - Dependabot `cooldown` (7/14/7/3 days for cargo, 7 for actions) so bumps arrive after the cargo-vet import sets have audited them
 - Dependabot groups for majors and for actions, plus a commented git-dependencies slot that must come first, so the weekly run opens at most four PRs and the auto-merge cascade (N PRs, O(N^2) CI runs) cannot start
 - SETUP.md: require every PR-triggered job including `Mutation Testing (diff)`, and leave "require branches to be up to date" off, with the reasoning for both
 - Initial project scaffold
-- `.mutants.toml.example` with scoping guidance to keep `cargo mutants` runs tractable on real downstreams
+- `.cargo/mutants.toml.example` with scoping guidance to keep `cargo mutants` runs tractable on real downstreams: `.cargo/` is the one path cargo-mutants reads (a root `.mutants.toml` is ignored silently) and the header says how to verify the config is live; `test_workspace = true` and no `--lib`, which skipped `tests/` integration targets and let cross-target kills survive; a commented nextest filterset as the speed lever and a commented `exclude_globs` for codegen output
 - `test.yml` split: ubuntu-only `Lint` job covers fmt, clippy, doctest, and `cargo doc`; the cross-platform matrix (ubuntu/macos/windows) runs only `cargo build` + `cargo nextest run`
 - Comments in `security.yml`, `.pre-commit-config.yaml`, and `deny.toml` documenting the `cargo audit --ignore` pattern keyed off `deny.toml`'s `[advisories] ignore` as source of truth
 - CLAUDE.md / SETUP.md note on `prek install --overwrite` to avoid double-firing legacy pre-commit hooks

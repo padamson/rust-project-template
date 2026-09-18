@@ -1,0 +1,43 @@
+# cargo-mutants configuration
+# Rename to `.cargo/mutants.toml` to activate.
+# Docs: https://mutants.rs/config-file.html
+#
+# cargo-mutants reads `.cargo/mutants.toml` and nothing else. A config at
+# the repo root (`.mutants.toml`) is ignored silently: no warning, not
+# even a parse error for invalid TOML. Verify the file is live with a
+# filter that should visibly change the mutant list, e.g. set
+# `examine_globs = ["src/lib.rs"]` and check `cargo mutants --list`
+# shrinks.
+#
+# Why this exists: `cargo mutants` runs the *entire* test suite once per
+# mutation. On a non-trivial project (integration tests, e2e suites,
+# wasm-pack steps, multi-crate workspaces) the unscoped run can take
+# many hours. Scope it.
+
+# Use nextest — much faster than `cargo test`.
+test_tool = "nextest"
+
+# Run the whole workspace's tests against each mutant, not just the
+# mutated package's. By default cargo-mutants runs only the mutated
+# package's tests, so a mutant whose killing test lives in another crate
+# survives silently. Don't add `--lib` to `additional_cargo_test_args`
+# for speed either: it skips `tests/` integration targets, even in a
+# single-crate project.
+test_workspace = true
+
+# Scope slow tests with a nextest filterset instead. This keeps every
+# target in the run and drops only the tests you name, e.g. e2e and
+# browser suites that no mutant in a logic crate can fail:
+# additional_cargo_test_args = ["-E", "not test(/e2e|slow/)"]
+
+# Limit which source files are mutated. Adjust glob to your project.
+# Examples:
+#   - single-crate: ["src/**/*.rs"]
+#   - workspace, one focus crate: ["my-crate/src/**/*.rs"]
+#   - workspace, all crates: ["crates/*/src/**/*.rs"]
+examine_globs = ["src/**/*.rs"]
+
+# Keep codegen output out of scope. Generated code (panschema, prost,
+# tonic, bindgen) has its source of truth in the schema and its tests
+# upstream, so mutating it only produces surviving-mutant noise.
+# exclude_globs = ["src/generated/**/*.rs"]

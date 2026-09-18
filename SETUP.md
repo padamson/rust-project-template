@@ -142,6 +142,10 @@ See the cargo-vet section below.
 
 ## cargo-vet initialization
 
+Until `cargo vet init` has run, both the pre-commit `cargo vet` hook and
+the CI `Supply Chain Review` job print a skip message and pass, so the
+first commit and push of a new repo are not blocked on this section.
+
 After your first `cargo build`, initialize supply chain auditing:
 
 ```bash

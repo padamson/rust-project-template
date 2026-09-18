@@ -29,21 +29,31 @@ Hooks mirror CI checks: fmt, clippy, check, nextest, doctest, audit, deny, vet.
 ```bash
 ./scripts/mutants.sh                 # diff HEAD~1..HEAD (default)
 ./scripts/mutants.sh main            # diff main..HEAD
+./scripts/mutants.sh --working       # diff uncommitted edits against HEAD
 ./scripts/mutants.sh -- --jobs 4     # pass extra cargo-mutants args
 ```
 
 `scripts/mutants.sh` wraps `cargo mutants --in-diff`, scoping mutation
 testing to just the lines a commit touched. A full-codebase run grows
 linearly with codebase size and routinely takes hours; `--in-diff`
-keeps the loop fast enough to use while the test is still warm.
+keeps the loop fast enough to use while the test is still warm. Use
+`--working` to gate edits before committing them (new files need
+`git add -N <file>` first to show up in the diff). Don't reach for
+`cargo mutants -f <file>` as the fast path: with `examine_globs` set it
+ignores the filter and sweeps everything in scope.
+
+Run one mutation job at a time; every run writes `mutants.out/`. A
+stray run is stopped with `pkill -f cargo-mutants` (hyphen; the binary
+is `cargo-mutants`).
 
 CI runs the per-diff variant on every push and PR (`mutation-testing-diff`
 in `security.yml`). The full-codebase job (`mutation-testing`) is
 manual-only via `workflow_dispatch` — use it for occasional audits or
 big refactors, never on a schedule.
 
-Scope the baseline with `.mutants.toml` (see `.mutants.toml.example`);
-`--in-diff` narrows from there.
+Scope the baseline with `.cargo/mutants.toml` (see
+`.cargo/mutants.toml.example`; a `.mutants.toml` at the repo root is
+ignored silently); `--in-diff` narrows from there.
 
 ## Release process
 

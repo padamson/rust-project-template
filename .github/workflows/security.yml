@@ -58,19 +58,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Check for the audit file before installing anything: a repo that
+      # has not run `cargo vet init` yet skips in seconds instead of
+      # building cargo-vet first.
+      - name: Check for supply-chain/
+        id: vet
+        shell: bash
+        run: |
+          if [ -f supply-chain/audits.toml ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "supply-chain/ not initialized; skipping. Run 'cargo vet init' to enable."
+          fi
+
       - name: Install Rust
+        if: steps.vet.outputs.enabled == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-vet
-        run: cargo install cargo-vet
+        if: steps.vet.outputs.enabled == 'true'
+        uses: taiki-e/install-action@v2.85.4
+        with:
+          tool: cargo-vet
 
       - name: Run cargo vet
-        run: |
-          if [ -f supply-chain/audits.toml ]; then
-            cargo vet
-          else
-            echo "supply-chain/ not initialized; skipping. Run 'cargo vet init' to enable."
-          fi
+        if: steps.vet.outputs.enabled == 'true'
+        run: cargo vet
 
   semver-checks:
     name: Semver Compatibility
@@ -121,8 +135,9 @@ jobs:
         with:
           tool: cargo-mutants
 
-      # If runs are too slow, scope mutation testing via `.mutants.toml`
-      # at the repo root. See `.mutants.toml.example` in the template.
+      # If runs are too slow, scope mutation testing via
+      # `.cargo/mutants.toml` (the only path cargo-mutants reads). See
+      # `.cargo/mutants.toml.example` in the template.
       - name: Run mutation testing
         run: cargo mutants
 
@@ -172,7 +187,8 @@ jobs:
       # - pull_request: merge base against the PR target branch
       # - push: the `before` SHA of the push (the parent of `after`).
       #   First push to a branch has `before = 000...0`; fall back to
-      #   HEAD~1 in that case.
+      #   HEAD~1 in that case. On a repo's root commit HEAD~1 doesn't
+      #   exist either; `scripts/mutants.sh` exits 0 instead of failing.
       - name: Compute diff base
         id: base
         shell: bash

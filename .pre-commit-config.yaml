@@ -88,10 +88,16 @@ repos:
         pass_filenames: false
         files: (Cargo\.toml|Cargo\.lock|deny\.toml)$
 
+      # Skips until `cargo vet init` has run (see SETUP.md), mirroring
+      # the guard on the CI job, so the first commit of a new repo isn't
+      # blocked on supply-chain setup. The `files` regex must match paths
+      # *under* `supply-chain/`; an end-anchored `supply-chain/$` matches
+      # nothing, and the hook then never fires on the audit files vet
+      # exists to review.
       - id: cargo-vet
         name: cargo vet
         description: Verify dependency supply chain audits
-        entry: cargo vet
+        entry: bash -c 'test -f supply-chain/audits.toml && exec cargo vet; echo "supply-chain/ not initialized; skipping (run cargo vet init to enable)."'
         language: system
         pass_filenames: false
-        files: (Cargo\.toml|Cargo\.lock|supply-chain/)$
+        files: (Cargo\.toml$|Cargo\.lock$|^supply-chain/)
