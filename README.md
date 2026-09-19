@@ -25,6 +25,22 @@ cargo install my-project
 my-project --help
 ```
 
+## Agent skill
+
+<!-- Template users: keep this block if the crate ships a skill under
+     `skills/`; delete it (and the skills/ directory) if not. SETUP.md has
+     the checklist. -->
+[![skills.sh](https://skills.sh/b/OWNER/REPO)](https://skills.sh/OWNER/REPO)
+
+```bash
+npx skills add OWNER/REPO
+```
+
+Works with [Claude Code](https://claude.ai/code),
+[Codex](https://openai.com/codex/), [Cursor](https://cursor.com), and any
+other [compatible agent](https://agentskills.io/clients). The install copies
+the skill into your repo and records its source in `skills-lock.json`.
+
 ## Development
 
 See [CLAUDE.md](CLAUDE.md) for development commands.
@@ -43,4 +59,11 @@ cargo nextest run
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  <http://opensource.org/licenses/MIT>)
+
+at your option.

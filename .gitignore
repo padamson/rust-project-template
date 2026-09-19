@@ -16,3 +16,13 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Agent skills installed with `npx skills add` (the skill of each tool this
+# crate depends on). The pin lives in skills-lock.json, which is tracked;
+# the content is fetched, so it is not vendored here. The Claude Code entry
+# points are symlinks into .agents/, and a tracked symlink would dangle in
+# any clone that has not run the install. The one exception is this repo's
+# own shipped skill, whose target is tracked under skills/.
+/.agents/
+/.claude/skills/*
+!/.claude/skills/my-project

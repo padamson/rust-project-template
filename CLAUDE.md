@@ -10,10 +10,15 @@ cargo nextest run        # run tests
 cargo test --doc         # doc tests
 cargo clippy             # lint
 cargo fmt                # format
-cargo audit              # security scan
-cargo deny check         # license/dependency check
+cargo deny check         # advisories, licenses, bans, sources (one ignore list: deny.toml)
 cargo vet                # supply chain review
 ```
+
+## Claude Code sandbox
+
+The sandbox is on in user settings for every repo, and a session never
+writes outside its own working tree. There is no per-repo sandbox file
+to look for.
 
 ## Pre-commit hooks
 
@@ -22,7 +27,37 @@ cargo install prek
 prek install --overwrite   # --overwrite replaces any legacy pre-commit hook
 ```
 
-Hooks mirror CI checks: fmt, clippy, check, nextest, doctest, audit, deny, vet.
+Hooks mirror CI checks: fmt, clippy, check, nextest, doctest, deny, vet,
+and the skill version guard.
+
+## Watching CI
+
+```bash
+./scripts/ci-watch.sh            # stream job results for HEAD until they finish
+./scripts/ci-watch.sh <sha>      # for a specific commit
+```
+
+One line per job as it reaches a terminal state, then an exit code:
+0 all green, 1 something failed, 2 timed out. A `gh` call inside a
+shell loop is not matched by the sandbox's command exclusion, so this
+script is excluded as a whole in `.claude/settings.json`.
+
+## Agent skills
+
+This crate ships its own skill under `skills/my-project/`, linked from
+`.claude/skills/my-project` so it auto-loads in this repo. Edits to it
+must bump `metadata.version` in its `SKILL.md`; the pre-commit hook and
+the `Skill version guard` CI job both enforce that.
+
+Skills of tools this crate depends on are managed installs, not vendored:
+`skills-lock.json` (tracked) records each source and a content hash, and
+`npx skills add <owner>/<repo>` fetches the content into `.agents/` and
+links it from `.claude/skills/`. Both paths are gitignored, so run the
+installs once after cloning, from a plain terminal (the sandbox denies
+writes under `.claude/skills/`). Verify with `ls -l .claude/skills/`: one
+entry per installed skill plus this crate's own. `npx skills update`
+defaults to Global scope at its prompt; choose Project, and confirm by
+reading `metadata.version` out of the installed `SKILL.md`.
 
 ## Mutation testing
 

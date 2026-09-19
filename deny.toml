@@ -10,9 +10,10 @@ no-default-features = false
 feature-depth = 1
 
 [advisories]
-# Source of truth for ignored RUSTSEC advisories. `cargo audit` has no
-# project-level config, so mirror this list as inline `--ignore` flags
-# in `.github/workflows/security.yml` and `.pre-commit-config.yaml`.
+# The only list of accepted RUSTSEC advisories. CI, the pre-commit hook
+# and the daily advisory monitor all run `cargo deny`, so nothing mirrors
+# this list and nothing can drift from it. Give each entry a reason:
+#   { id = "RUSTSEC-2026-XXXX", reason = "no fix upstream; not reachable from our call graph" }
 ignore = []
 
 [licenses]

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- `release.yml` publishes to crates.io with Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`); the token-missing skip and the `continue-on-error` on the publish step are gone, since both made a failed publish look green. SETUP.md walks through the crates.io publisher entry
+- `advisory-monitor.yml`: daily `cargo deny check advisories`, opening one tracking issue on a new advisory and closing it when the tree is clean; the report reaches the issue body through an env var, not string interpolation
+- `cargo audit` removed from CI and the hooks: `cargo deny check` reads the same advisory database, so `deny.toml`'s `[advisories] ignore` is the single list and nothing mirrors it. `Security Audit` leaves the required checks
+- Every action in every workflow pinned to a commit SHA with the version in a trailing comment (Dependabot keeps them current); workflow permissions default to `contents: read` and each writing job names what it writes
+- `.github/actions/diff-base`: one composite action giving the mutation and skill-guard jobs the PR base branch's current tip, the push's previous tip, or nothing on a first push
+- Shipped agent skill scaffold: `skills/my-project/` with `references/`, a tracked `.claude/skills/my-project` symlink for in-repo auto-loading, `scripts/check-skill-version-bumped.sh` as a pre-commit hook and a `Skill version guard` CI job, and the `npx skills add` block plus skills.sh badge in README.md. SETUP.md says how to ship it or remove it
+- Consumed agent skills: `.agents/` and `.claude/skills/*` gitignored with a negation for the shipped skill, and a CLAUDE.md section on `npx skills add` installs and refreshes
+- Tracked `.claude/settings.json` with the Claude Code sandbox block (loopback network, configd Mach lookup, excluded commands for git, gh, nextest, cargo run, prek, the mutants and ci-watch scripts)
+- `scripts/ci-watch.sh` streams job results for a commit until every run finishes, with a CLAUDE.md section
+- CLAUDE.md states the sandbox is on for every repo and cross-repo writes are not allowed; SETUP.md says `prek install` writes `.git/hooks` and is run by hand once per clone
+- Dual license, `MIT OR Apache-2.0`: `LICENSE-MIT` and `LICENSE-APACHE`, `Cargo.toml` and README updated
+- SETUP.md: keeping `target/` under control (cargo-sweep, turning incremental off, build-script assets outside `OUT_DIR` with their own CI cache), converting to a workspace, and a `build.rs` recipe so `--version` reports the build commit off a release tag
+- Pre-commit: a comment by the nextest hook stating that the hook's feature set must equal the union of CI's, and a commented `exclude:` for byte-exact fixture directories on the whitespace hooks
+- `security.yml`: a commented resolve-then-`--rev` recipe for installing a tool from a git branch
 - `scripts/mutants.sh` diffs a root commit against git's empty tree, so `Mutation Testing (diff)` tests the initial scaffold instead of failing with exit 128 on a repo's first push; a user-supplied base ref that does not resolve is now a hard error rather than a silent pass
 - `scripts/mutants.sh --working` diffs uncommitted edits against `HEAD` (or a given ref), for gating a change before it is committed
 - `scripts/mutants.sh` passes `--no-renames` to `git diff`, so a `git mv` produces a mutable diff instead of a green gate over unmutated code
