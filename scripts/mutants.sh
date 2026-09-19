@@ -118,16 +118,17 @@ fi
 DIFF="$(mktemp -t mutants.XXXXXX.diff)"
 trap 'rm -f "$DIFF"' EXIT
 
-# `--no-renames` on both paths: git renders a pure `git mv` as a rename
-# with zero content lines, which `--in-diff` reads as "nothing changed"
-# and passes green without mutating the moved code.
-if [[ "$WORKING" -eq 1 ]]; then
-  RANGE="working tree vs ${LABEL}"
-  git diff "$BASE" --no-renames > "$DIFF"
-else
+# One `git diff` for both modes: `<base> HEAD` for a ref range, `<base>`
+# alone for the working tree. `--no-renames` because git renders a pure
+# `git mv` as a rename with zero content lines, which `--in-diff` reads
+# as "nothing changed" and passes green without mutating the moved code.
+DIFF_ARGS=(--no-renames "$BASE")
+RANGE="working tree vs ${LABEL}"
+if [[ "$WORKING" -eq 0 ]]; then
+  DIFF_ARGS+=(HEAD)
   RANGE="${LABEL}..HEAD"
-  git diff "${BASE}..HEAD" --no-renames > "$DIFF"
 fi
+git diff "${DIFF_ARGS[@]}" > "$DIFF"
 
 if [[ ! -s "$DIFF" ]]; then
   echo "no diff for ${RANGE} — nothing to mutate."
@@ -140,4 +141,6 @@ if [[ ! -s "$DIFF" ]]; then
 fi
 
 echo "mutating changes in ${RANGE} ($(wc -l < "$DIFF") diff lines)"
-exec cargo mutants --in-diff "$DIFF" "$@"
+# Not `exec`: that would replace the shell and skip the EXIT trap, leaking
+# the diff file on every run. The exit status propagates via `set -e`.
+cargo mutants --in-diff "$DIFF" "$@"

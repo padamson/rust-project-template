@@ -186,9 +186,12 @@ jobs:
       # Compute the right diff base for this trigger.
       # - pull_request: merge base against the PR target branch
       # - push: the `before` SHA of the push (the parent of `after`).
-      #   First push to a branch has `before = 000...0`; fall back to
-      #   HEAD~1 in that case. On a repo's root commit HEAD~1 doesn't
-      #   exist either; `scripts/mutants.sh` exits 0 instead of failing.
+      #   First push to a branch has `before = 000...0`; pass no ref in
+      #   that case so `scripts/mutants.sh` applies its own default:
+      #   HEAD~1, or git's empty tree when HEAD is the repo's root
+      #   commit. Passing `HEAD~1` explicitly would make the script
+      #   fail on a root commit, since a caller-supplied ref must
+      #   resolve.
       - name: Compute diff base
         id: base
         shell: bash
@@ -196,7 +199,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "ref=origin/${{ github.base_ref }}" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            echo "ref=HEAD~1" >> $GITHUB_OUTPUT
+            echo "ref=" >> $GITHUB_OUTPUT
           else
             echo "ref=${{ github.event.before }}" >> $GITHUB_OUTPUT
           fi
