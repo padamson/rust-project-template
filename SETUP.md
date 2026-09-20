@@ -9,7 +9,7 @@ After creating a repo from this template, complete these steps.
 - [x] Pre-commit hooks via prek
 - [x] cargo-deny configuration (the one advisory ignore list)
 - [x] Tracked Claude Code sandbox settings (`.claude/settings.json`)
-- [x] A shipped agent skill scaffold under `skills/`, with its version guard
+- [x] An agent skill scaffold under `skills/` (hidden from installers until you ship it), with its version guard
 - [x] CHANGELOG scaffold
 - [x] CLAUDE.md with development commands
 
@@ -18,7 +18,7 @@ After creating a repo from this template, complete these steps.
 - [ ] Replace `my-project` with your project name in `Cargo.toml`, `README.md`, and `CLAUDE.md`
 - [ ] Replace `OWNER/REPO` with your GitHub path in `Cargo.toml` and `CHANGELOG.md`
 - [ ] Replace `Your Name` with your name in `Cargo.toml`, and `Paul Adamson` in `LICENSE-MIT`
-- [ ] Rename `skills/my-project` to your crate name, and update the `.gitignore` negation and the `.claude/skills/` symlink that point at it (or delete the skill; see "Agent skill" below)
+- [ ] Decide about `skills/my-project`: ship it under your crate's name, or delete it (see "Agent skill" below)
 - [ ] Update `description`, `categories`, and `keywords` in `Cargo.toml`
 - [ ] Update `README.md` with your project description and usage
 - [ ] Update `CLAUDE.md` with project-specific context
@@ -242,19 +242,34 @@ For each unvetted entry in a failing PR:
 
 ## Agent skill
 
-`skills/my-project/` is what `npx skills add OWNER/REPO` installs into a
-consumer's repo, and `.claude/skills/my-project` is a tracked symlink to
-it so the skill auto-loads while working in this repo. Decide now:
+`skills/my-project/` is the shape of the skill this crate would ship:
+the directory `npx skills add OWNER/REPO` installs into a consumer's
+repo, so an agent there knows how to use the crate. As scaffolded it is
+hidden from installers (`metadata.internal: true`) and nothing loads it.
+Decide now:
 
-- [ ] **Ship it.** Rename the directory to your crate name, fix the
-  symlink and the `.gitignore` negation, write `SKILL.md` for an agent
-  that has never seen the crate, and fill `references/`. Every later
-  content edit bumps `metadata.version`; the pre-commit hook and the
-  `Skill version guard` CI job refuse one that doesn't.
-- [ ] **Don't ship one.** Delete `skills/`, the symlink,
+- [ ] **Ship it.** Rename the directory to your crate name, remove the
+  `internal` line from `SKILL.md`, write it for an agent that has never
+  seen the crate, and fill `references/`. Every later content edit bumps
+  `metadata.version`; the pre-commit hook and the `Skill version guard`
+  CI job refuse one that doesn't. Keep the "Agent skill" block in
+  `README.md`.
+
+  Only if this repo uses its own crate (examples, an e2e suite, docs that
+  exercise it) is it worth auto-loading the skill in-repo too. Claude
+  Code discovers project skills at `.claude/skills/` alone, so add one
+  tracked symlink and un-ignore it:
+
+  ```bash
+  ln -s ../../skills/<name> .claude/skills/<name>
+  echo '!/.claude/skills/<name>' >> .gitignore
+  ```
+
+- [ ] **Don't ship one.** Delete `skills/`,
   `scripts/check-skill-version-bumped.sh`, the `skill-version-bumped`
-  hook, the `skill-version` job in `test.yml`, the "Agent skill" block in
-  `README.md`, and drop `Skill version guard` from the required checks.
+  hook in `.pre-commit-config.yaml`, the `skill-version` job in
+  `test.yml`, and the "Agent skill" block in `README.md`, and drop
+  `Skill version guard` from the required checks.
 
 Skills of the tools this crate depends on are the other direction, and
 CLAUDE.md covers them: `npx skills add <owner>/<repo>` once per clone,

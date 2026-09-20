@@ -44,10 +44,10 @@ script is excluded as a whole in `.claude/settings.json`.
 
 ## Agent skills
 
-This crate ships its own skill under `skills/my-project/`, linked from
-`.claude/skills/my-project` so it auto-loads in this repo. Edits to it
-must bump `metadata.version` in its `SKILL.md`; the pre-commit hook and
-the `Skill version guard` CI job both enforce that.
+`skills/my-project/` is the skill this crate ships to consumers (see
+SETUP.md "Agent skill" to ship or delete it). Edits to it must bump
+`metadata.version` in its `SKILL.md`; the pre-commit hook and the
+`Skill version guard` CI job both enforce that.
 
 Skills of tools this crate depends on are managed installs, not vendored:
 `skills-lock.json` (tracked) records each source and a content hash, and
@@ -55,7 +55,7 @@ Skills of tools this crate depends on are managed installs, not vendored:
 links it from `.claude/skills/`. Both paths are gitignored, so run the
 installs once after cloning, from a plain terminal (the sandbox denies
 writes under `.claude/skills/`). Verify with `ls -l .claude/skills/`: one
-entry per installed skill plus this crate's own. `npx skills update`
+entry per installed skill. `npx skills update`
 defaults to Global scope at its prompt; choose Project, and confirm by
 reading `metadata.version` out of the installed `SKILL.md`.
 
