@@ -117,8 +117,10 @@ fi
 
 # A full template under $TMPDIR, not `mktemp -t`: on macOS `-t` ignores
 # $TMPDIR and writes to the per-user /var/folders dir, which a sandboxed
-# session cannot write. Not a fixed path either, which two runs would share.
-DIFF="$(mktemp "${TMPDIR:-/tmp}/mutants.XXXXXX.diff")"
+# session cannot write. The X's come last: BSD mktemp randomizes only a
+# trailing run of them, so `mutants.XXXXXX.diff` would be one fixed path
+# that a concurrent run, or a stale file from a killed run, collides with.
+DIFF="$(mktemp "${TMPDIR:-/tmp}/mutants.XXXXXX")"
 trap 'rm -f "$DIFF"' EXIT
 
 # One `git diff` for both modes: `<base> HEAD` for a ref range, `<base>`

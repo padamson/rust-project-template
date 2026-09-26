@@ -77,10 +77,16 @@ fn live_poll_sees_a_value_produced_on_another_thread() {
         tx.send(7).unwrap();
     });
 
+    // `Empty` is "not yet"; `Disconnected` means the producer died and the
+    // poll must fail now rather than wait out the deadline.
     let got = poll_until(
         "a value from the producer thread",
         Duration::from_secs(2),
-        || Ok::<_, mpsc::TryRecvError>(rx.try_recv().ok()),
+        || match rx.try_recv() {
+            Ok(v) => Ok(Some(v)),
+            Err(mpsc::TryRecvError::Empty) => Ok(None),
+            Err(e @ mpsc::TryRecvError::Disconnected) => Err(e),
+        },
     );
 
     assert!(matches!(got, Ok(7)), "got {got:?}");

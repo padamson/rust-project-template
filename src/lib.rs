@@ -68,12 +68,15 @@ pub fn classify_with(count: i64, large_threshold: i64) -> Result<Size, SizeError
 
 /// The large threshold, read through `env` so tests can pass a fixed map
 /// instead of mutating the process environment (`std::env::set_var` is
-/// unsafe under parallel tests). An unset, empty, or unparsable value
-/// falls back to [`DEFAULT_LARGE_THRESHOLD`].
+/// unsafe under parallel tests). An unset, empty, unparsable, or
+/// non-positive value falls back to [`DEFAULT_LARGE_THRESHOLD`]: a
+/// threshold of zero or less would make every non-empty count large and
+/// `Small` unreachable, which is a typo, not a setting.
 pub fn large_threshold(env: impl Fn(&str) -> Option<String>) -> i64 {
     env(LARGE_THRESHOLD_VAR)
         .filter(|v| !v.trim().is_empty())
         .and_then(|v| v.trim().parse().ok())
+        .filter(|t: &i64| *t > 0)
         .unwrap_or(DEFAULT_LARGE_THRESHOLD)
 }
 
@@ -107,7 +110,9 @@ mod tests {
 
     #[test]
     fn the_threshold_itself_is_large() {
-        // `>=` mutated to `>` would put the threshold in Small.
+        // Kills `replace >= with <`, the one mutant cargo-mutants emits
+        // for this operator: 10 < 10 is false, so the threshold lands in
+        // Small.
         assert_eq!(classify(DEFAULT_LARGE_THRESHOLD), Ok(Size::Large));
     }
 
@@ -150,6 +155,24 @@ mod tests {
             large_threshold(env_of(&[(LARGE_THRESHOLD_VAR, "  ")])),
             DEFAULT_LARGE_THRESHOLD
         );
+    }
+
+    #[test]
+    fn a_non_positive_threshold_falls_back_to_the_default() {
+        // Zero would make Small unreachable; `> 0` mutated to `>= 0` lets it through.
+        for value in ["0", "-5"] {
+            assert_eq!(
+                large_threshold(env_of(&[(LARGE_THRESHOLD_VAR, value)])),
+                DEFAULT_LARGE_THRESHOLD,
+                "threshold {value} must fall back"
+            );
+        }
+    }
+
+    #[test]
+    fn a_threshold_of_one_is_the_smallest_accepted() {
+        // The boundary of the `> 0` filter: 1 is a real setting, 0 is not.
+        assert_eq!(large_threshold(env_of(&[(LARGE_THRESHOLD_VAR, "1")])), 1);
     }
 
     #[test]

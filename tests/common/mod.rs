@@ -32,8 +32,19 @@ impl Workspace {
     }
 
     /// Write `contents` to `name` under the workspace and return its path.
+    /// `name` is relative and stays inside the workspace, or the cleanup
+    /// guarantee is void: an absolute or `..` path would be written for
+    /// real and left behind.
     pub fn write(&self, name: &str, contents: &str) -> PathBuf {
-        let path = self.root.join(name);
+        let rel = Path::new(name);
+        assert!(
+            rel.is_relative()
+                && !rel
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir)),
+            "fixture path must stay inside the workspace; got {name}"
+        );
+        let path = self.root.join(rel);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
@@ -70,10 +81,11 @@ where
         if let Some(value) = probe().map_err(PollError::Probe)? {
             return Ok(value);
         }
-        if start.elapsed() >= timeout {
+        let waited = start.elapsed();
+        if waited >= timeout {
             return Err(PollError::Deadline {
                 what: what.to_string(),
-                waited: start.elapsed(),
+                waited,
             });
         }
         std::thread::sleep(Duration::from_millis(20));

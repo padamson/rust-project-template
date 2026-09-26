@@ -26,7 +26,8 @@ fail-fast = false
 # clean.
 retries = 1
 slow-timeout = { period = "120s", terminate-after = 2 }
-junit = { path = "junit.xml" }
+# Add `junit = { path = "junit.xml" }` here only together with a CI step
+# that uploads or reads `target/nextest/ci/junit.xml`.
 
 # Tests that share a real resource (one database, one browser pool)
 # serialize in a group. An in-process mutex serializes nothing under
