@@ -18,6 +18,7 @@ jobs:
   skill-version:
     name: Skill version guard
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # The pre-commit hook of the same name is per-clone and opt-in, so a
     # hookless clone or a `--no-verify` commit would ship a skill edit
     # without the version bump installed consumers key their updates on.
@@ -46,6 +47,7 @@ jobs:
   msrv:
     name: MSRV Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -64,6 +66,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -84,8 +87,11 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      # nextest does not run doctests, so this is its own step. The
+      # crate keeps at least one doctest (the seed's `classify` has one),
+      # which is what makes this step honest; delete the step if the
+      # crate ever has none rather than running a no-op.
       - name: Run doc-tests
-        if: hashFiles('**/src/lib.rs') != ''
         run: cargo test --doc --workspace
 
       - name: Generate documentation
@@ -94,6 +100,9 @@ jobs:
   test:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # nextest's slow-timeout catches a hung test; this catches a hung
+    # runner or a wedged tool install.
+    timeout-minutes: 30
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -119,5 +128,7 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
+      # `--profile ci` (.config/nextest.toml): retries on, so a retried
+      # pass is reported FLAKY instead of hiding, and a longer slow-timeout.
       - name: Run tests
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --profile ci

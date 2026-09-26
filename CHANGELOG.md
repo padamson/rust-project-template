@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- `dependabot.yml`: a commented `directories:` example on the cargo entry, for repos whose excluded crates commit their own `Cargo.lock` (Dependabot reads only the root lock otherwise)
+- `.config/nextest.toml`: slow-timeout and leak-timeout in every profile, retries only under `[profile.ci]` (which CI now runs), a commented test-group example; every CI job carries `timeout-minutes`
+- `.cargo/mutants.toml` ships live instead of as an `.example`, so a fresh clone never runs mutation testing unscoped under `cargo test`
+- Seed crate rewritten as claim-shaped tests: `classify` returns a `Size` enum with a boundary at the threshold and a `SizeError::Negative` variant carrying the count; the threshold reads the environment through an injected lookup; `tests/common/mod.rs` ships a `TempDir`-owning `Workspace` fixture and a bounded `poll_until`; one `#[ignore = "..."]` test shows the gate for anything a fresh clone may lack. `tempfile` as a dev-dependency
+- Doctest policy: `cargo test --doc` always runs, and the crate keeps at least one doctest so the step is honest
+- CLAUDE.md "Tests" section with the shapes and the runner policy
+- `scripts/mutants.sh` creates its scratch diff under `$TMPDIR` with a full template; `mktemp -t` ignores `$TMPDIR` on macOS and fails under the Claude Code sandbox
 - `release.yml` publishes to crates.io with Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`); the token-missing skip and the `continue-on-error` on the publish step are gone, since both made a failed publish look green. SETUP.md walks through the crates.io publisher entry
 - `advisory-monitor.yml`: daily `cargo deny check advisories`, opening one tracking issue on a new advisory and closing it when the tree is clean; the report reaches the issue body through an env var, not string interpolation
 - `cargo audit` removed from CI and the hooks: `cargo deny check` reads the same advisory database, so `deny.toml`'s `[advisories] ignore` is the single list and nothing mirrors it. `Security Audit` leaves the required checks
@@ -32,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Dependabot groups for majors and for actions, plus a commented git-dependencies slot that must come first, so the weekly run opens at most four PRs and the auto-merge cascade (N PRs, O(N^2) CI runs) cannot start
 - SETUP.md: require every PR-triggered job including `Mutation Testing (diff)`, and leave "require branches to be up to date" off, with the reasoning for both
 - Initial project scaffold
-- `.cargo/mutants.toml.example` with scoping guidance to keep `cargo mutants` runs tractable on real downstreams: `.cargo/` is the one path cargo-mutants reads (a root `.mutants.toml` is ignored silently) and the header says how to verify the config is live; `test_workspace = true` and no `--lib`, which skipped `tests/` integration targets and let cross-target kills survive; a commented nextest filterset as the speed lever and a commented `exclude_globs` for codegen output
+- `.cargo/mutants.toml` with scoping guidance to keep `cargo mutants` runs tractable on real downstreams: `.cargo/` is the one path cargo-mutants reads (a root `.mutants.toml` is ignored silently) and the header says how to verify the config is live; `test_workspace = true` and no `--lib`, which skipped `tests/` integration targets and let cross-target kills survive; a commented nextest filterset as the speed lever and a commented `exclude_globs` for codegen output
 - `test.yml` split: ubuntu-only `Lint` job covers fmt, clippy, doctest, and `cargo doc`; the cross-platform matrix (ubuntu/macos/windows) runs only `cargo build` + `cargo nextest run`
 - Comments in `security.yml`, `.pre-commit-config.yaml`, and `deny.toml` documenting the `cargo audit --ignore` pattern keyed off `deny.toml`'s `[advisories] ignore` as source of truth
 - CLAUDE.md / SETUP.md note on `prek install --overwrite` to avoid double-firing legacy pre-commit hooks

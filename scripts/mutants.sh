@@ -115,7 +115,10 @@ if [[ "$BASE" == "$EMPTY_TREE" ]]; then
   LABEL="empty tree (root commit)"
 fi
 
-DIFF="$(mktemp -t mutants.XXXXXX.diff)"
+# A full template under $TMPDIR, not `mktemp -t`: on macOS `-t` ignores
+# $TMPDIR and writes to the per-user /var/folders dir, which a sandboxed
+# session cannot write. Not a fixed path either, which two runs would share.
+DIFF="$(mktemp "${TMPDIR:-/tmp}/mutants.XXXXXX.diff")"
 trap 'rm -f "$DIFF"' EXIT
 
 # One `git diff` for both modes: `<base> HEAD` for a ref range, `<base>`

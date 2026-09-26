@@ -86,9 +86,27 @@ in `security.yml`). The full-codebase job (`mutation-testing`) is
 manual-only via `workflow_dispatch` — use it for occasional audits or
 big refactors, never on a schedule.
 
-Scope the baseline with `.cargo/mutants.toml` (see
-`.cargo/mutants.toml.example`; a `.mutants.toml` at the repo root is
-ignored silently); `--in-diff` narrows from there.
+Scope the baseline with `.cargo/mutants.toml`, which ships live (a
+`.mutants.toml` at the repo root is ignored silently); `--in-diff`
+narrows from there.
+
+## Tests
+
+A test is a claim about behavior, named as the claim, one claim per
+test, asserting the value (`assert_eq!` on an enum, `matches!` on the
+error variant and what it names) rather than prose. The seed crate shows
+the shapes: a decision returned as a value, an error that carries the
+offending input, an environment read through an injected lookup, a
+`TempDir`-owning fixture and a bounded poll in `tests/common/mod.rs`,
+and one `#[ignore = "reason; run with ..."]` test as the gate for
+anything a fresh clone may lack. Never `return` from a test because a
+precondition is missing.
+
+`.config/nextest.toml` bounds every test with a slow-timeout; the hook
+runs the default profile (no retries) and CI runs `--profile ci` (one
+retry, reported FLAKY). nextest does not run doctests, so `cargo test
+--doc` is its own step, and the crate keeps at least one doctest so that
+step is not a no-op.
 
 ## Release process
 

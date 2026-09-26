@@ -13,3 +13,5 @@ keywords = []
 [dependencies]
 
 [dev-dependencies]
+# Scratch directories for the integration-test fixture in tests/common.
+tempfile = "3"
