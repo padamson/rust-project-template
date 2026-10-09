@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Doctest policy: `cargo test --doc` always runs, and the crate keeps at least one doctest so the step is honest
 - CLAUDE.md "Tests" section with the shapes and the runner policy
 - `scripts/mutants.sh` creates its scratch diff under `$TMPDIR` with a full template; `mktemp -t` ignores `$TMPDIR` on macOS and fails under the Claude Code sandbox
-- `release.yml` publishes to crates.io with Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`); the token-missing skip and the `continue-on-error` on the publish step are gone, since both made a failed publish look green. SETUP.md walks through the crates.io publisher entry
+- `release.yml` publishes to crates.io with Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`); the token-missing skip and the `continue-on-error` on the publish step are gone, since both made a failed publish look green. SETUP.md walks through the crates.io publisher entry, and SETUP.md and CLAUDE.md give the `audit-as-crates-io = false` cargo-vet policy each crate needs after its first publish
 - `advisory-monitor.yml`: daily `cargo deny check advisories`, opening one tracking issue on a new advisory and closing it when the tree is clean; the report reaches the issue body through an env var, not string interpolation
 - `cargo audit` removed from CI and the hooks: `cargo deny check` reads the same advisory database, so `deny.toml`'s `[advisories] ignore` is the single list and nothing mirrors it. `Security Audit` leaves the required checks
 - Every action in every workflow pinned to a commit SHA with the version in a trailing comment (Dependabot keeps them current); workflow permissions default to `contents: read` and each writing job names what it writes
@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `deny.toml`: `allow-wildcard-paths = true`, so versionless path deps of `publish = false` workspace members and dev-dependencies do not trip `wildcards = "deny"`
 - CLAUDE.md: `--working` usage, the `-f <file>` trap, and the one-run-at-a-time rule for `mutants.out/`
 - `Supply Chain Review` job checks for `supply-chain/audits.toml` before installing cargo-vet, so an uninitialized repo skips in seconds instead of building the tool first; it builds cargo-vet from crates.io, since the newest release with binaries (0.10.0, all `install-action` can fetch) cannot parse `trusted-publisher` entries
-- `dependabot-auto-merge.yml`: enables squash auto-merge on every Dependabot PR; the required status checks are the whole gate, since merges made with `GITHUB_TOKEN` trigger no push run on `main`
+- `dependabot-auto-merge.yml`: enables squash auto-merge on every Dependabot PR behind the required status checks, using a GitHub App's token so each merge starts a push run on `main` (a `GITHUB_TOKEN` merge starts none). SETUP.md walks through the App, its two Dependabot secrets, and the Allow auto-merge and delete-head-branch settings
 - Dependabot `cooldown` (7/14/7/3 days for cargo, 7 for actions) so bumps arrive after the cargo-vet import sets have audited them
 - Dependabot groups for majors and for actions, plus a commented git-dependencies slot that must come first, so the weekly run opens at most four PRs and the auto-merge cascade (N PRs, O(N^2) CI runs) cannot start
 - SETUP.md: require every PR-triggered job including `Mutation Testing (diff)`, and leave "require branches to be up to date" off, with the reasoning for both

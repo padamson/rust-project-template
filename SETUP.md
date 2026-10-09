@@ -37,10 +37,10 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 
   **Require every PR-triggered job.** The required checks are the entire
   merge gate for Dependabot: `dependabot-auto-merge.yml` enables auto-merge
-  with `GITHUB_TOKEN`, and merges made with that token trigger no push run
-  on `main`, so nothing tests a bump after it lands. A job left off this
-  list (Supply Chain Review is the classic omission) means a bump merges
-  with that job red.
+  on every Dependabot PR, and it merges the moment these are green. The
+  push run on `main` afterwards tests the merged tree but cannot stop the
+  merge. A job left off this list (Supply Chain Review is the classic
+  omission) means a bump merges with that job red.
 
   - `MSRV Check` — cheap; catches accidental use of post-MSRV features
   - `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
@@ -89,6 +89,49 @@ These settings cannot be configured via code and must be set in the GitHub UI.
   JSON
   ```
 
+### Dependabot auto-merge
+
+`dependabot-auto-merge.yml` enables auto-merge with a GitHub App's token.
+A merge made with the default `GITHUB_TOKEN` starts no workflows, so
+`main` would never get a push run for a Dependabot merge: nothing would
+test the tree two sibling bumps leave behind, and push-only jobs would not
+run. Until the App and its secrets exist, the workflow's first step fails
+and Dependabot PRs sit green and unmerged.
+
+- [ ] **Settings > General > Pull Requests:** turn on "Allow auto-merge"
+  and "Automatically delete head branches". With auto-merge off, the
+  workflow's `gh pr merge --auto` fails and nothing merges.
+
+  ```bash
+  gh api -X PATCH repos/OWNER/REPO \
+    -F allow_auto_merge=true -F delete_branch_on_merge=true
+  ```
+
+- [ ] **Create the App** (one App serves every repo you own; skip to the
+  install if you have it). **Settings > Developer settings > GitHub Apps >
+  New GitHub App**: any name and homepage URL, webhook off, and repository
+  permissions **Contents**, **Pull requests** and **Workflows** set to
+  read and write. Workflows is there because Dependabot's actions bumps
+  edit files under `.github/workflows/`. Note the **Client ID**, then
+  generate a private key and save the `.pem`.
+- [ ] **Install the App** on this repo: the App's page > **Install App** >
+  your account > **Only select repositories**.
+- [ ] **Add the two secrets as Dependabot secrets**, not Actions secrets.
+  A Dependabot-triggered run can read only Dependabot secrets.
+
+  ```bash
+  gh secret set AUTOMERGE_APP_CLIENT_ID --app dependabot --body <client-id>
+  gh secret set AUTOMERGE_APP_PRIVATE_KEY --app dependabot < <app>.private-key.pem
+  ```
+
+- [ ] **Never add the App to the branch protection bypass list.** Its
+  merges would then skip the required checks.
+- [ ] **Prove it.** With Dependabot security updates on (Code security,
+  below) and an advisory open, a PR arrives right away, since security
+  updates ignore the cooldown; otherwise wait for the weekly run. The
+  merged PR's `merged_by` should be the App's bot, and its merge commit
+  should have the full set of push runs on `main`.
+
 ### Code security
 
 - [ ] **Settings > Code security and analysis** (`/settings/security_analysis`): Enable:
@@ -112,6 +155,17 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   the first version from your machine with a token scoped to
   `publish-new`, then add the trusted publisher and revoke the token; every
   later release goes through the workflow.
+
+- [ ] Once the crate is on crates.io, tell cargo-vet it is this repo's own
+  code. From the first publish on, `cargo vet` matches the path crate to
+  the published version and fails every push ("non-crates.io-fetched
+  packages match published crates.io versions") until the crate has a
+  policy. Add to `supply-chain/config.toml`, once per published crate:
+
+  ```toml
+  [policy.<crate>]
+  audit-as-crates-io = false
+  ```
 
   If the publisher is missing or misnamed, the `Authenticate to crates.io`
   step fails and the run is red. That is the intended signal. The workflow

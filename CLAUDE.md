@@ -118,4 +118,9 @@ step is not a no-op.
 
 The tag triggers CI which builds, tests, creates a GitHub Release, and publishes to crates.io.
 
+After a crate's first publish (the first release, or a crate new to the
+workspace), add `[policy.<crate>] audit-as-crates-io = false` to
+`supply-chain/config.toml`. Until it is there, `cargo vet` matches the
+path crate to its crates.io version and fails every push.
+
 <!-- Add custom skills under .claude/skills/ as needed -->
