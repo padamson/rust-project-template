@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `scripts/ci-watch.sh` streams job results for a commit until every run finishes, with a CLAUDE.md section
 - CLAUDE.md states the sandbox is on for every repo and cross-repo writes are not allowed; SETUP.md says `prek install` writes `.git/hooks` and is run by hand once per clone
 - Dual license, `MIT OR Apache-2.0`: `LICENSE-MIT` and `LICENSE-APACHE`, `Cargo.toml` and README updated
-- SETUP.md: keeping `target/` under control (cargo-sweep, turning incremental off, build-script assets outside `OUT_DIR` with their own CI cache), converting to a workspace, and a `build.rs` recipe so `--version` reports the build commit off a release tag
+- SETUP.md: keeping `target/` under control (a `find` that lists Cargo-made `target/` directories idle 30 days, since cargo-sweep is unmaintained; turning incremental off, build-script assets outside `OUT_DIR` with their own CI cache), converting to a workspace, and a `build.rs` recipe so `--version` reports the build commit off a release tag
 - Pre-commit: a comment by the nextest hook stating that the hook's feature set must equal the union of CI's, and a commented `exclude:` for byte-exact fixture directories on the whitespace hooks
 - `security.yml`: a commented resolve-then-`--rev` recipe for installing a tool from a git branch
 - `scripts/mutants.sh` diffs a root commit against git's empty tree, so `Mutation Testing (diff)` tests the initial scaffold instead of failing with exit 128 on a repo's first push; a user-supplied base ref that does not resolve is now a hard error rather than a silent pass
