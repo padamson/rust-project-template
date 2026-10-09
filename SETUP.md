@@ -95,8 +95,10 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 A merge made with the default `GITHUB_TOKEN` starts no workflows, so
 `main` would never get a push run for a Dependabot merge: nothing would
 test the tree two sibling bumps leave behind, and push-only jobs would not
-run. Until the App and its secrets exist, the workflow's first step fails
-and Dependabot PRs sit green and unmerged.
+run. Until the App and its secrets exist, the workflow's first step fails,
+so every Dependabot PR shows a red **Enable auto-merge** check and waits
+for you to merge it by hand. That check is not required, so the red is a
+reminder, not a block.
 
 - [ ] **Settings > General > Pull Requests:** turn on "Allow auto-merge"
   and "Automatically delete head branches". With auto-merge off, the
@@ -123,6 +125,12 @@ and Dependabot PRs sit green and unmerged.
   gh secret set AUTOMERGE_APP_CLIENT_ID --app dependabot --body <client-id>
   gh secret set AUTOMERGE_APP_PRIVATE_KEY --app dependabot < <app>.private-key.pem
   ```
+
+  The private key mints tokens for every repo the App is installed on, so
+  install it only where everyone with write access could be trusted with
+  all of them; a repo with outside collaborators gets its own App. Delete
+  the local `.pem` once the secret is set. If the key is needed again,
+  generate a new one on the App's page and delete the old one there.
 
 - [ ] **Never add the App to the branch protection bypass list.** Its
   merges would then skip the required checks.
@@ -156,6 +164,12 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   `publish-new`, then add the trusted publisher and revoke the token; every
   later release goes through the workflow.
 
+  If the publisher is missing or misnamed, the `Authenticate to crates.io`
+  step fails and the run is red. That is the intended signal. The workflow
+  has no "skip if not configured" path and no `continue-on-error` on the
+  publish, because both turn a broken release into a green run with no
+  crate.
+
 - [ ] Once the crate is on crates.io, tell cargo-vet it is this repo's own
   code. From the first publish on, `cargo vet` matches the path crate to
   the published version and fails every push ("non-crates.io-fetched
@@ -166,12 +180,6 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   [policy.<crate>]
   audit-as-crates-io = false
   ```
-
-  If the publisher is missing or misnamed, the `Authenticate to crates.io`
-  step fails and the run is red. That is the intended signal. The workflow
-  has no "skip if not configured" path and no `continue-on-error` on the
-  publish, because both turn a broken release into a green run with no
-  crate.
 
 ### Environments (optional)
 
@@ -339,9 +347,11 @@ payoff outside a single edit-rebuild loop.
 - **Sweep periodically.** `cargo-sweep` is unmaintained, so use a
   plain `find` (or `cargo-clean-all`, which is maintained). This lists
   every `target/` under `~/src` that Cargo made (its `CACHEDIR.TAG` says
-  so) and in which nothing was modified in 30 days, so a repo you only
-  build still counts as in use; add `&& rm -rf "$1"` inside the quotes
-  once the list looks right:
+  so) and in which nothing was modified in 30 days. A build that compiles
+  anything counts as use, but a no-op build writes nothing, so a repo you
+  only build or run, with no pull, lockfile change or toolchain update in
+  that time, is listed too. Read the list, then add `&& rm -rf "$1"`
+  inside the quotes:
 
   ```bash
   find ~/src -type d -name target -prune -exec sh -c \

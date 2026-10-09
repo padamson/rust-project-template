@@ -75,14 +75,22 @@ jobs:
       # which cannot parse the `trusted-publisher` entries that 0.10.2
       # (crates.io) writes. No cache step here, so the restored-binary
       # failure `cargo install` has in the mutation jobs does not apply.
+      # `--locked` builds against cargo-vet's own Cargo.lock. No version pin
+      # on purpose: Dependabot cannot bump a `run:` line, and cargo-vet
+      # refuses a store written by a newer version, so a pinned CI copy
+      # older than a contributor's local one goes red.
       - name: Install cargo-vet
         if: steps.vet.outputs.enabled == 'true'
-        run: cargo install cargo-vet
+        run: cargo install --locked cargo-vet
 
       - name: Run cargo vet
         if: steps.vet.outputs.enabled == 'true'
         run: cargo vet
 
+  # Never fires today: this workflow's push trigger lists branches only, so
+  # the tag condition below is never met. The check belongs in release.yml,
+  # where it can gate the publish; until it moves there, nothing checks
+  # semver before a release.
   semver-checks:
     name: Semver Compatibility
     runs-on: ubuntu-latest
@@ -97,7 +105,7 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-semver-checks
-        run: cargo install cargo-semver-checks
+        run: cargo install --locked cargo-semver-checks
 
       - name: Check semver compatibility
         run: cargo semver-checks check-release
