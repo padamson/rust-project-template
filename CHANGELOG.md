@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Every action in every workflow pinned to a commit SHA with the version in a trailing comment (Dependabot keeps them current); workflow permissions default to `contents: read` and each writing job names what it writes
 - `.github/actions/diff-base`: one composite action giving the mutation and skill-guard jobs the PR base branch's current tip, the push's previous tip, or nothing on a first push
 - Agent skill scaffold: `skills/my-project/` with `references/`, hidden from installers by `metadata.internal: true` until shipped; `scripts/check-skill-version-bumped.sh` as a pre-commit hook and a `Skill version guard` CI job; the `npx skills add` block plus skills.sh badge in README.md. SETUP.md says how to ship it (with the in-repo symlink as an opt-in for crates that use themselves) or remove it
-- Consumed agent skills: `.agents/` and `.claude/skills/` gitignored, and a CLAUDE.md section on `npx skills add` installs and refreshes
+- Consumed agent skills: `.agents/` and `.claude/skills/` gitignored, and a CLAUDE.md section on `npx skills add` installs (from a plain terminal) and `npx skills update -p` refreshes (fine inside the sandbox)
 - Tracked `.claude/settings.json` with the Claude Code sandbox block (loopback network, configd Mach lookup, excluded commands for git, gh, nextest, cargo run, prek, the mutants and ci-watch scripts)
 - `scripts/ci-watch.sh` streams job results for a commit until every run finishes, with a CLAUDE.md section
 - CLAUDE.md states the sandbox is on for every repo and cross-repo writes are not allowed; SETUP.md says `prek install` writes `.git/hooks` and is run by hand once per clone
