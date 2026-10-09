@@ -33,7 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Pre-commit `cargo vet` hook: `files` regex now matches paths under `supply-chain/` (the end-anchored pattern matched nothing), and the hook skips until `cargo vet init` has run, mirroring the CI job
 - `deny.toml`: `allow-wildcard-paths = true`, so versionless path deps of `publish = false` workspace members and dev-dependencies do not trip `wildcards = "deny"`
 - CLAUDE.md: `--working` usage, the `-f <file>` trap, and the one-run-at-a-time rule for `mutants.out/`
-- `Supply Chain Review` job checks for `supply-chain/audits.toml` before installing cargo-vet, so an uninitialized repo skips in seconds instead of building the tool first
+- `Supply Chain Review` job checks for `supply-chain/audits.toml` before installing cargo-vet, so an uninitialized repo skips in seconds instead of building the tool first; it builds cargo-vet from crates.io, since the newest release with binaries (0.10.0, all `install-action` can fetch) cannot parse `trusted-publisher` entries
 - `dependabot-auto-merge.yml`: enables squash auto-merge on every Dependabot PR; the required status checks are the whole gate, since merges made with `GITHUB_TOKEN` trigger no push run on `main`
 - Dependabot `cooldown` (7/14/7/3 days for cargo, 7 for actions) so bumps arrive after the cargo-vet import sets have audited them
 - Dependabot groups for majors and for actions, plus a commented git-dependencies slot that must come first, so the weekly run opens at most four PRs and the auto-merge cascade (N PRs, O(N^2) CI runs) cannot start

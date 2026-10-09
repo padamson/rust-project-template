@@ -70,11 +70,14 @@ jobs:
         with:
           toolchain: stable
 
+      # Built from crates.io on purpose: install-action serves GitHub release
+      # binaries, and cargo-vet's newest release with binaries is 0.10.0,
+      # which cannot parse the `trusted-publisher` entries that 0.10.2
+      # (crates.io) writes. No cache step here, so the restored-binary
+      # failure `cargo install` has in the mutation jobs does not apply.
       - name: Install cargo-vet
         if: steps.vet.outputs.enabled == 'true'
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
-        with:
-          tool: cargo-vet
+        run: cargo install cargo-vet
 
       - name: Run cargo vet
         if: steps.vet.outputs.enabled == 'true'
