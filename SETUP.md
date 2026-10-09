@@ -388,10 +388,17 @@ a proc-macro crate, a separate binary), not before.
 3. `.cargo/mutants.toml`: `examine_globs = ["crates/*/src/**/*.rs"]`.
    `deny.toml` already allows versionless path deps between private
    workspace members.
-4. `release.yml` publishes one crate per tag with `cargo publish`; a
-   workspace that publishes several needs `-p <crate>` per step, a
-   trusted-publisher entry on crates.io for each, and a tag scheme that
-   says which crate a tag releases.
+4. `release.yml` semver-checks and publishes every crate whose `publish`
+   is not `false`, each at its own version, skipping a version already on
+   crates.io. If one crate depends on another, replace the publish step's
+   `cargo metadata` list with the crates in dependency order, since cargo
+   resolves each from crates.io. Each published crate needs its own
+   trusted-publisher entry and its own `audit-as-crates-io = false`
+   policy. A `v*` tag releases every publishable crate whose version is
+   not yet on crates.io; the tag's version has to match at least one of
+   them, and it names the archives and picks the CHANGELOG section for the
+   release notes. A crate new to the workspace is published by hand once,
+   like the first, before its trusted publisher can exist.
 5. Run `cargo nextest run --workspace`, `cargo clippy --all-targets
    --all-features -- -D warnings`, `cargo deny check`, and
    `./scripts/mutants.sh --working --list` before committing; the last

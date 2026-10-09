@@ -87,28 +87,8 @@ jobs:
         if: steps.vet.outputs.enabled == 'true'
         run: cargo vet
 
-  # Never fires today: this workflow's push trigger lists branches only, so
-  # the tag condition below is never met. The check belongs in release.yml,
-  # where it can gate the publish; until it moves there, nothing checks
-  # semver before a release.
-  semver-checks:
-    name: Semver Compatibility
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # stable
-        with:
-          toolchain: stable
-
-      - name: Install cargo-semver-checks
-        run: cargo install --locked cargo-semver-checks
-
-      - name: Check semver compatibility
-        run: cargo semver-checks check-release
+  # Semver compatibility is checked in release.yml, where it can gate the
+  # publish. This workflow never triggers on tag pushes.
 
   mutation-testing:
     name: Mutation Testing (full)
