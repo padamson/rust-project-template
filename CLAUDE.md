@@ -10,7 +10,8 @@ cargo nextest run        # run tests
 cargo test --doc         # doc tests
 cargo clippy             # lint
 cargo fmt                # format
-cargo deny check         # advisories, licenses, bans, sources (one ignore list: deny.toml)
+cargo deny check         # advisories (root lockfile only), licenses, bans, sources (one ignore list: deny.toml)
+./scripts/check-advisories.sh  # advisories in every tracked Cargo.lock, the way CI gates them
 cargo vet                # supply chain review
 ```
 
