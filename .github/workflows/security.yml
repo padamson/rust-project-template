@@ -91,8 +91,82 @@ jobs:
         if: steps.vet.outputs.enabled == 'true'
         run: cargo vet
 
-  # Semver compatibility is checked in release.yml, where it can gate the
-  # publish. This workflow never triggers on tag pushes.
+  # The early signal for release.yml's semver gate, which runs only on the
+  # tag: by then the release commit is on main and the tag is public. Not a
+  # required check. Between releases Cargo.toml still carries the last
+  # released version, which cargo-semver-checks reads as a minor bump, so a
+  # red run means the next release needs a bigger bump than planned, not
+  # that the PR is wrong; on 0.x every deliberate break would otherwise
+  # block merging until the bump landed. The gate also sees only the breaks
+  # it has lints for (a changed return type passes), so the CHANGELOG's
+  # breaking entries are the other half of the check.
+  semver-preview:
+    name: Semver preview
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+
+      # The same crates and the same crates.io rules as release.yml's gate,
+      # plus one skip: a crate whose manifest still names the template's
+      # placeholder repository has the placeholder's name too, and the
+      # crates.io crate of that name is someone else's. That is this
+      # template itself, and a new repo until SETUP.md's search and replace.
+      # Listed before anything is cached or installed, so a repo with
+      # nothing to compare yet pays for neither.
+      - name: List the crates to compare
+        id: crates
+        env:
+          USER_AGENT: ${{ github.repository }} semver preview (https://github.com/${{ github.repository }})
+        run: |
+          set -euo pipefail
+          metadata=$(cargo metadata --no-deps --format-version 1)
+          has_lib='any(.targets[]; any(.kind[]; . == "lib" or . == "rlib"))'
+          placeholder='.repository == "https://github.com/OWNER/REPO"'
+          jq -r ".packages[] | select(.publish != []) | select($placeholder) | .name" <<< "$metadata" \
+            | while read -r crate; do echo "$crate still names the placeholder repository; nothing of its own on crates.io"; done
+          jq -r ".packages[] | select(.publish != []) | select($placeholder | not) | select($has_lib | not) | .name" <<< "$metadata" \
+            | while read -r crate; do echo "$crate has no library target; nothing to semver-check"; done
+          jq -r ".packages[] | select(.publish != []) | select($placeholder | not) | select($has_lib) | .name" <<< "$metadata" > "$RUNNER_TEMP/candidates"
+          : > "$RUNNER_TEMP/crates"
+          while read -r crate; do
+            status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 \
+                       -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate")
+            case "$status" in
+              200) echo "$crate" >> "$RUNNER_TEMP/crates" ;;
+              404) echo "$crate is not on crates.io yet; nothing to compare against" ;;
+              *)   echo "::error::crates.io answered $status for $crate"; exit 1 ;;
+            esac
+          done < "$RUNNER_TEMP/candidates"
+          if [ -s "$RUNNER_TEMP/crates" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+
+      # Both the current tree and the crates.io baseline are built for
+      # rustdoc on every run; the cache carries both under target/.
+      - name: Cache Cargo
+        if: steps.crates.outputs.any == 'true'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: semver-preview
+
+      - name: Install cargo-semver-checks
+        if: steps.crates.outputs.any == 'true'
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-semver-checks
+
+      - name: Check semver against the last release
+        if: steps.crates.outputs.any == 'true'
+        run: |
+          set -euo pipefail
+          args=()
+          while read -r crate; do args+=(-p "$crate"); done < "$RUNNER_TEMP/crates"
+          cargo semver-checks check-release "${args[@]}"
 
   mutation-testing:
     name: Mutation Testing (full)

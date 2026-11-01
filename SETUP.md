@@ -48,6 +48,11 @@ These settings cannot be configured via code and must be set in the GitHub UI.
   - `License & Dependency Check`, `Supply Chain Review`
   - `Mutation Testing (diff)`, `Skill version guard`
 
+  Leave `Semver preview` off the list. It is the early warning for the
+  release's semver gate, and on 0.x a deliberate breaking change turns it
+  red until the release that bumps the version, which would block every
+  merge in between.
+
   **Leave "require branches to be up to date" off** (`strict: false`).
   With it on, the second green Dependabot PR of the week is stale the moment
   the first merges, auto-merge never updates branches, and Dependabot only
@@ -89,6 +94,31 @@ These settings cannot be configured via code and must be set in the GitHub UI.
   JSON
   ```
 
+- [ ] **Settings > Rules > Rulesets > New tag ruleset:** restrict
+  creation, update and deletion of release tags, with the Repository admin
+  role as the only bypass. The merge App's token can push a tag, a tag
+  pushed with it starts `release.yml` (one pushed with `GITHUB_TOKEN`
+  would not), and the release publishes through Trusted Publishing, so
+  without the ruleset a leaked App key could release any commit. Cover
+  every pattern under `on.push.tags` in `release.yml`: `v*` here, plus
+  any per-crate prefix you add after converting to a workspace.
+
+  ```bash
+  gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
+  {
+    "name": "release tags",
+    "target": "tag",
+    "enforcement": "active",
+    "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+    "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
+    "bypass_actors": [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+  }
+  JSON
+  ```
+
+  Your own `git push origin main --tags` still works through the admin
+  bypass.
+
 ### Dependabot auto-merge
 
 `dependabot-auto-merge.yml` enables auto-merge with a GitHub App's token.
@@ -98,7 +128,11 @@ test the tree two sibling bumps leave behind, and push-only jobs would not
 run. Until the App and its secrets exist, the workflow's first step fails,
 so every Dependabot PR shows a red **Enable auto-merge** check and waits
 for you to merge it by hand. That check is not required, so the red is a
-reminder, not a block.
+reminder, not a block. The same red, with an error naming the file, marks
+a Dependabot PR that edits `dependabot-auto-merge.yml` itself: the job
+stops before minting a token, since a bump of the token action would
+otherwise run with the App's key before review. Read the bump and merge
+it by hand.
 
 - [ ] **Settings > General > Pull Requests:** turn on "Allow auto-merge"
   and "Automatically delete head branches". With auto-merge off, the
@@ -293,14 +327,24 @@ arriving — pause and decide before merging. Auto-regenerating
 rubber-stamps every upstream change and defeats the point of
 `cargo vet`.
 
-For each unvetted entry in a failing PR:
+The fix lands on `main`, not on the PR branch. Dependabot's rebase is a
+force-push that drops any commit added to its branch, and a human push
+makes the auto-merge job skip the PR, so it would need a hand merge
+anyway. For each unvetted entry in a failing PR, on `main`:
 
 - **`cargo vet certify <crate> <version>`** — gold standard. Read the
-  diff, attest, commit the new audit onto the PR branch.
-- **`cargo vet regenerate exemptions`** — bronze standard. Acceptable
+  diff (`diff -ru` of the two versions under `~/.cargo/registry/src/`),
+  then attest.
+- **An exemption for the new version** — bronze standard. Acceptable
   for patch bumps from known publishers; not for new transitives or
-  majors. Commit the config change onto the PR branch.
+  majors. Add it by hand to `supply-chain/config.toml`, beside the old
+  version's entry rather than in place of it, so `main` stays green
+  until the PR merges. (`cargo vet regenerate exemptions` on `main`
+  never sees the PR's version.)
 - **Reject** if the diff looks sketchy.
+
+Push, comment `@dependabot rebase` on the PR so its next run picks up
+the audits, and run `cargo vet prune` once it merges.
 
 ## Agent skill
 

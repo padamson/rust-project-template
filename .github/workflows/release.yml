@@ -57,7 +57,9 @@ jobs:
       # those are listed and passed over. A crate not yet on crates.io has no
       # baseline, so it is skipped too, but only on a 404. Any other answer
       # (an outage, a rate limit) fails the job: skipping on it would release
-      # with no semver check at all.
+      # with no semver check at all. The loop reads the crate list on stdin,
+      # so the check (or a git fetch it starts) is kept off it, or it could
+      # swallow the crates after the first.
       - name: Check semver compatibility
         env:
           USER_AGENT: ${{ github.repository }} release workflow (https://github.com/${{ github.repository }})
@@ -72,7 +74,7 @@ jobs:
             status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 \
                        -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate")
             case "$status" in
-              200) cargo semver-checks check-release -p "$crate" ;;
+              200) cargo semver-checks check-release -p "$crate" </dev/null ;;
               404) echo "$crate is not on crates.io yet; nothing to compare against" ;;
               *)   echo "::error::crates.io answered $status for $crate"; exit 1 ;;
             esac

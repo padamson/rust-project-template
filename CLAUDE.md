@@ -47,6 +47,38 @@ exclusion, so this script is excluded as a whole in
 env-var prefix (`POLL=15 ./scripts/ci-watch.sh`) is not the excluded
 command, so the script runs sandboxed and every `gh` call fails.
 
+## Manual checks
+
+What a session cannot check and the person reviewing the work can. A
+hand-off before a commit names each one that applies, as its command and
+what a pass looks like; CI is the backstop, not the plan.
+
+**From a plain terminal** (the sandbox blocks these):
+
+- A change to `.claude/settings.json`: the sandbox denies writes to it,
+  so apply the edit by hand, then run `/sandbox` in a new session. A pass
+  is the resolved config showing the change.
+- A new consumed skill: `npx skills add <owner>/<repo>` (Agent skills,
+  below). A pass is one entry per skill in `ls -l .claude/skills/`.
+- A new public API's rustdoc: `cargo doc --open`, since `open` is blocked
+  in the sandbox.
+
+**Not from a session at all**, changed on github.com or crates.io: the
+`main` branch protection and its required checks, the `release tags`
+ruleset, Allow auto-merge and automatic head-branch deletion, the merge
+App and its two Dependabot secrets, Dependabot alerts and security
+updates, and the crate's Trusted Publisher (SETUP.md has each).
+
+**By eye:**
+
+- Prose a reader will act on: the CHANGELOG entry, README, SETUP.md
+  steps, and the shipped skill under `skills/`. The skill version guard
+  checks the bump, not that the prose is still true.
+- A workflow change: the first run of the changed job on GitHub, since
+  nothing local runs it. A job that only fires on a tag, a schedule or a
+  Dependabot PR waits for that event, or a `workflow_dispatch` where it
+  has one.
+
 ## Agent skills
 
 `skills/my-project/` is the skill this crate ships to consumers (see
