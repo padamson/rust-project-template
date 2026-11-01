@@ -86,8 +86,9 @@ jobs:
           echo "number=$(jq -r '.number // ""' "$RUNNER_TEMP/issue.json")" >> "$GITHUB_OUTPUT"
 
       # scripts/advisory-issue-body.py rewrites only the report section of
-      # the body and says whether the findings changed. The report reaches
-      # it as a file, never through `${{ }}` interpolation: advisory text is
+      # the body, says whether the findings changed, and writes the comment
+      # that lists what came and went. The report reaches it as a file,
+      # never through `${{ }}` interpolation: advisory text is
       # community-authored and could otherwise be evaluated by the shell.
       #
       # A report from a partly broken check is missing the broken trees, so
@@ -107,7 +108,7 @@ jobs:
             echo "Partial report; leaving tracking issue #$EXISTING as it is"
             exit 0
           fi
-          status="$(scripts/advisory-issue-body.py "$RUNNER_TEMP/old.txt" "$RUNNER_TEMP/report.txt" "$RUNNER_TEMP/body.txt")"
+          status="$(scripts/advisory-issue-body.py "$RUNNER_TEMP/old.txt" "$RUNNER_TEMP/report.txt" "$RUNNER_TEMP/body.txt" "$RUNNER_TEMP/comment.txt")"
           if [ -z "$EXISTING" ]; then
             echo "Opening tracking issue"
             gh label create "$ISSUE_LABEL" \
@@ -126,9 +127,10 @@ jobs:
           echo "Updating tracking issue #$EXISTING ($status)"
           gh issue edit "$EXISTING" --body-file "$RUNNER_TEMP/body.txt"
           # Only a change in the findings is worth notifying watchers about.
+          # The comment names the findings themselves, since the run log it
+          # links expires after 90 days.
           if [ "$status" = changed ]; then
-            gh issue comment "$EXISTING" \
-              --body "The advisory findings changed. The issue body has the new report, and [the run log]($RUN_URL) has it in full."
+            gh issue comment "$EXISTING" --body-file "$RUNNER_TEMP/comment.txt"
           fi
 
       - name: Close the tracking issue

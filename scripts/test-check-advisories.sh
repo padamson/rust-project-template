@@ -8,8 +8,9 @@
 # fetch error a hit files an issue about the network. A stub `cargo` on
 # PATH replays real cargo-deny 0.20 output, and that output is what pins
 # the classifier to the format it was written against. The checker runs
-# from a scratch repo with a root and a nested lockfile, so the tree list
-# is tested as well. The renderer cases pin when watchers get a comment.
+# from a scratch repo with a root and two nested lockfiles, so the tree
+# list is tested as well. The renderer cases pin when watchers get a
+# comment, and that the body always fits on GitHub.
 
 set -euo pipefail
 
@@ -30,20 +31,27 @@ mkdir "$work/bin" "$work/fx"
 # The checker resolves the repo from its own path, so it runs as a copy
 # inside a repo whose tracked lockfiles the test controls. The untracked
 # one stands in for a stray build tree, and oldCargo.lock for a fixture
-# whose name only ends in Cargo.lock; no gate should read either.
+# whose name only ends in Cargo.lock; no gate should read either. git
+# quotes a non-ASCII path unless asked not to, so one tree has such a name.
 repo="$work/repo"
-mkdir -p "$repo/scripts" "$repo/fuzz" "$repo/scratch"
+mkdir -p "$repo/scripts" "$repo/fuzz" "$repo/naïve" "$repo/scratch"
+# As the checker's own `cd` spells it: a TMPDIR with a trailing slash
+# leaves a `//` in "$work" that `cd` drops.
+repo=$(cd "$repo" && pwd)
 cp "$here/check-advisories.sh" "$repo/scripts/"
 checker="$repo/scripts/check-advisories.sh"
-touch "$repo/Cargo.lock" "$repo/fuzz/Cargo.lock" "$repo/fuzz/oldCargo.lock" "$repo/scratch/Cargo.lock"
+touch "$repo/Cargo.lock" "$repo/fuzz/Cargo.lock" "$repo/fuzz/oldCargo.lock" "$repo/naïve/Cargo.lock" "$repo/scratch/Cargo.lock"
 git -C "$repo" init -q
-git -C "$repo" add Cargo.lock fuzz/Cargo.lock fuzz/oldCargo.lock
+git -C "$repo" add Cargo.lock fuzz/Cargo.lock fuzz/oldCargo.lock naïve/Cargo.lock
 
 # Replays the root fixture for the root manifest and the nested fixture
-# for any other.
+# for any other. It reads stdin dry, as a git fetch for a git dependency
+# can, so a checker that shares its lockfile list with cargo deny's stdin
+# checks one tree and drops the rest.
 cat > "$work/bin/cargo" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >> "$STUB_DIR/calls"
+cat > /dev/null
 [ "$1" = deny ] || { echo "stub cargo: unexpected subcommand: $*" >&2; exit 99; }
 fx=$STUB_NESTED
 while [ $# -gt 0 ]; do
@@ -128,7 +136,7 @@ run() {
     : > "$work/calls"
     status=0
     PATH="$work/bin:$PATH" STUB_DIR="$work" STUB_ROOT="$1" STUB_NESTED="$2" \
-        "$checker" > "$work/out" 2> "$work/stderr" || status=$?
+        "$checker" > "$work/out" 2> "$work/stderr" < /dev/null || status=$?
 }
 
 expect() {
@@ -147,15 +155,17 @@ expect() {
 
 run clean clean
 expect "every tree clean is clean" 0 ""
-if [ "$(grep -c -- '--log-level error --color never --workspace --manifest-path .* check advisories$' "$work/calls")" -eq 2 ]; then
-    echo "ok: the quiet and whole-workspace flags are passed"
+if [ "$(grep -cF -- "--log-level error --color never --workspace --config $repo/deny.toml --manifest-path " "$work/calls")" -eq 3 ]; then
+    echo "ok: every call is quiet, whole-workspace, and reads the root deny.toml"
 else
-    fail "the quiet and whole-workspace flags were not passed" "$work/calls"
+    fail "a call was missing the quiet, workspace or root-config flags" "$work/calls"
 fi
-if grep -qx -- '.*--manifest-path Cargo.toml .*' "$work/calls" &&
+if [ "$(wc -l < "$work/calls")" -eq 3 ] &&
+    grep -qx -- '.*--manifest-path Cargo.toml .*' "$work/calls" &&
     grep -qx -- '.*--manifest-path fuzz/Cargo.toml .*' "$work/calls" &&
+    grep -qx -- '.*--manifest-path naïve/Cargo.toml .*' "$work/calls" &&
     ! grep -qE 'scratch|oldCargo' "$work/calls"; then
-    echo "ok: one cargo deny per tracked Cargo.lock, and none for an untracked or merely similar one"
+    echo "ok: one cargo deny per tracked Cargo.lock, named as it is on disk, and none for an untracked or merely similar one"
 else
     fail "expected one cargo deny per tracked lockfile" "$work/calls"
 fi
@@ -185,14 +195,61 @@ cp "$work/out" "$work/more.txt"
 run both both
 cp "$work/out" "$work/spread.txt"
 
-git -C "$repo" rm -q --cached Cargo.lock fuzz/Cargo.lock
+git -C "$repo" rm -q --cached Cargo.lock fuzz/Cargo.lock naïve/Cargo.lock
 run clean clean
 expect "no tracked Cargo.lock is broken, not clean" 2 ""
 
 # render OLD_BODY_FILE REPORT_FILE, then rendered NAME STATUS TEXT. TEXT
 # is a line the new body must contain.
 render() {
-    status_out=$("$renderer" "$1" "$2" "$work/body.txt")
+    status_out=$(RUN_URL=https://example.invalid/run "$renderer" "$1" "$2" "$work/body.txt" "$work/comment.txt")
+}
+
+# commented NAME TEXT...: each TEXT is a line the comment must contain.
+commented() {
+    local name="$1" text
+    shift
+    for text in "$@"; do
+        if ! grep -qF -- "$text" "$work/comment.txt"; then
+            fail "$name: comment did not contain '$text'" "$work/comment.txt"
+            return
+        fi
+    done
+    echo "ok: $name"
+}
+
+# lacks NAME FILE TEXT: FILE must not contain TEXT.
+lacks() {
+    if grep -qF -- "$3" "$2"; then
+        fail "$1" "$2"
+    else
+        echo "ok: $1"
+    fi
+}
+
+# fits NAME: the body is under GitHub's 65536-character limit.
+fits() {
+    local size
+    size=$(wc -m < "$work/body.txt")
+    if [ "$size" -lt 65536 ]; then
+        echo "ok: $1"
+    else
+        fail "$1: body is $size characters"
+    fi
+}
+
+# trees N: the one-finding report repeated N times, copy i under
+# crates/ci/Cargo.lock. One awk, not N seds.
+trees() {
+    awk -v n="$1" '{ line[NR] = $0 }
+        END { for (i = 1; i <= n; i++) for (j = 1; j <= NR; j++) {
+            l = line[j]; sub(/\(Cargo\.lock\)/, "(crates/c" i "/Cargo.lock)", l); print l } }' "$work/report.txt"
+}
+
+# notes N: N lines of triage notes.
+notes() {
+    awk -v n="$1" 'BEGIN { for (i = 1; i <= n; i++)
+        printf "Triage note %d: still waiting on an upstream release of this crate.\n", i }'
 }
 
 rendered() {
@@ -224,6 +281,14 @@ rendered "a finding whose lockfile line moved refreshes without a comment" refre
 
 render "$work/opened.txt" "$work/more.txt"
 rendered "a new finding is a change" changed "RUSTSEC-2021-0003"
+commented "and the comment names it, and links the run log" \
+    "New:" "cargo deny check advisories (fuzz/Cargo.lock): RUSTSEC-2021-0003" "(https://example.invalid/run)"
+cp "$work/body.txt" "$work/more-opened.txt"
+
+render "$work/more-opened.txt" "$work/report.txt"
+rendered "a finding that went away is a change" changed "RUSTSEC-2025-0141"
+commented "and the comment names it as resolved" \
+    "Resolved:" "cargo deny check advisories (fuzz/Cargo.lock): RUSTSEC-2021-0003"
 
 # Every heading, title and id in spread.txt is already in more.txt, only
 # now each advisory is in both trees.
@@ -235,14 +300,30 @@ rendered "a known advisory reaching another lockfile is a change" changed "RUSTS
 render "$work/stray.txt" "$work/report.txt"
 rendered "an end marker before the report does not duplicate it" unchanged "RUSTSEC-2025-0141"
 
-for n in $(seq 400); do sed "s|(Cargo.lock)|(crates/c$n/Cargo.lock)|" "$work/report.txt"; done > "$work/huge.txt"
+{ printf 'Earlier: <!-- advisory-report -->\n\n'; cat "$work/opened.txt"; } > "$work/stray-start.txt"
+render "$work/stray-start.txt" "$work/report.txt"
+rendered "a start marker before the report does not duplicate it" unchanged "RUSTSEC-2025-0141"
+
+# An advisory title is community-authored; one holding a fence must not
+# close the report's and render the rest as markdown.
+sed 's/Bincode is unmaintained/Bincode ``` is unmaintained/' "$work/report.txt" > "$work/backticks.txt"
+render "$work/empty.txt" "$work/backticks.txt"
+rendered "a fence in an advisory title gets a longer fence around it" changed '````'
+cp "$work/body.txt" "$work/backticks-opened.txt"
+render "$work/backticks-opened.txt" "$work/backticks.txt"
+rendered "and that body reads back unchanged" unchanged "Bincode \`\`\` is unmaintained"
+
+# A body from before reports named their lockfiles: the same findings,
+# with no tree to pair them with.
+{ printf '<!-- advisory-report -->\n```\n'; cat "$work/fx/hit.out"; printf '```\n<!-- /advisory-report -->\n'; } > "$work/pre-port.txt"
+render "$work/pre-port.txt" "$work/report.txt"
+rendered "a body from before lockfile headings, with the same findings, refreshes without a comment" refreshed "## cargo deny check advisories (Cargo.lock)"
+
+trees 400 > "$work/huge.txt"
 render "$work/empty.txt" "$work/huge.txt"
-rendered "an oversized report keeps its findings and drops the graphs" changed "Inclusion graphs dropped"
-if [ "$(wc -c < "$work/body.txt")" -lt 65536 ] && grep -qF "crates/c400/Cargo.lock" "$work/body.txt"; then
-    echo "ok: and it fits under GitHub's body limit with every lockfile named"
-else
-    fail "an oversized report did not fit, or lost a lockfile: $(wc -c < "$work/body.txt") bytes"
-fi
+rendered "an oversized report keeps its findings and drops the graphs" changed "Cut to fit GitHub's size limit"
+fits "and it fits"
+rendered "with every lockfile named" changed "## cargo deny check advisories (crates/c400/Cargo.lock)"
 cp "$work/body.txt" "$work/huge-opened.txt"
 sed 's/Cargo\.lock:13:1/Cargo.lock:17:1/' "$work/huge.txt" > "$work/huge-moved.txt"
 render "$work/huge-opened.txt" "$work/huge-moved.txt"
@@ -251,6 +332,45 @@ rendered "an oversized report with the same findings leaves the issue alone" unc
 printf 'Triage: waiting on syntect.\n\n%s\n' "$(cat "$work/opened.txt")" > "$work/noted.txt"
 render "$work/noted.txt" "$work/more.txt"
 rendered "triage notes outside the report survive an update" changed "Triage: waiting on syntect."
+
+# Even the findings alone can outgrow the limit; the cut must keep its
+# notice and whole lines.
+trees 2000 > "$work/enormous.txt"
+render "$work/empty.txt" "$work/enormous.txt"
+rendered "findings past the limit are cut, and the cut says so" changed "Cut to fit GitHub's size limit"
+fits "and it fits"
+cp "$work/body.txt" "$work/enormous-opened.txt"
+
+# A new finding at the front pushes the last ones past the cut; they are
+# still live, so nothing is announced as resolved.
+{ sed 's|(fuzz/Cargo.lock)|(crates/c0/Cargo.lock)|' "$work/more.txt" | sed -n '/(crates\/c0\/Cargo.lock)/,/advisories FAILED/p'
+  printf '\n'; cat "$work/enormous.txt"; } > "$work/enormous-more.txt"
+render "$work/enormous-opened.txt" "$work/enormous-more.txt"
+rendered "a new finding in a cut report is a change" changed "RUSTSEC-2021-0003"
+commented "and the comment names it" "crates/c0/Cargo.lock): RUSTSEC-2021-0003"
+lacks "and findings pushed past the cut are not called resolved" "$work/comment.txt" "Resolved:"
+
+# Triage notes count toward the limit as well as the report does.
+{ notes 600; cat "$work/opened.txt"; } > "$work/long-notes.txt"
+render "$work/long-notes.txt" "$work/huge.txt"
+rendered "long triage notes and an oversized report" changed "Triage note 600:"
+fits "still fit together"
+
+# Notes that leave no room at all: the findings are still live, so this
+# is no change, whatever the body could show.
+{ notes 1100; cat "$work/opened.txt"; } > "$work/longer-notes.txt"
+render "$work/longer-notes.txt" "$work/report.txt"
+rendered "notes too long to leave room for the report do not resolve its findings" refreshed "Triage note 1100:"
+
+# Both markers kept around a report someone reshaped by hand.
+sed 's|^<!-- advisory-report -->$|&\n<details>\n|' "$work/opened.txt" > "$work/reshaped.txt"
+render "$work/reshaped.txt" "$work/report.txt"
+rendered "a reshaped report between intact markers is replaced, not duplicated" refreshed "RUSTSEC-2025-0141"
+if [ "$(grep -cF '<!-- advisory-report -->' "$work/body.txt")" -eq 1 ]; then
+    echo "ok: and the body holds one report"
+else
+    fail "a reshaped report left two reports in the body" "$work/body.txt"
+fi
 
 printf 'Hand-written body with no markers.\n' > "$work/bare.txt"
 render "$work/bare.txt" "$work/report.txt"
