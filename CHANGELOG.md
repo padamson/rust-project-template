@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `dependabot-auto-merge.yml` leaves a Dependabot PR that edits the workflow itself for a hand merge, read from the event's base and head SHAs, so a bumped token action never runs with the App's key before review
 - `security.yml`: a `Semver preview` job on pushes and PRs, not required, comparing each publishable library crate with its latest crates.io release ahead of the tag-time gate; it passes over a crate whose manifest still names the placeholder repository
 - SETUP.md: a `release tags` ruleset, admin bypass only, so a leaked merge-App key cannot push a release tag; vet fixes for a Dependabot PR land on `main` and reach the PR through `@dependabot rebase`
+- `Cargo.toml`: a `[lints]` table with `unsafe_code = "deny"` and an empty clippy table
 - `.claude/settings.json`: `com.apple.trustd.agent` beside `configd` in `allowMachLookup`, so a tool that verifies TLS through the macOS platform verifier (`cargo audit` 0.22) can fetch its database in-session
 - CLAUDE.md: a `## Manual checks` section listing what a session cannot check (plain-terminal gates, GitHub and crates.io settings, what to read by eye)
 - `scripts/mutants.sh` diffs a root commit against git's empty tree, so `Mutation Testing (diff)` tests the initial scaffold instead of failing with exit 128 on a repo's first push; a user-supplied base ref that does not resolve is now a hard error rather than a silent pass

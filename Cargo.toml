@@ -10,6 +10,17 @@ authors = ["Your Name"]
 categories = []
 keywords = []
 
+[lints.rust]
+# Nothing here has a reason to reach for unsafe. `deny` (not `forbid`)
+# leaves a targeted `#[allow(unsafe_code)]` escape hatch if a future FFI
+# edge genuinely needs one.
+unsafe_code = "deny"
+
+# The place for the clippy lints this crate turns on; the template imposes
+# none. After converting to a workspace (SETUP.md), move both tables to
+# `[workspace.lints.*]` and give each crate `[lints] workspace = true`.
+[lints.clippy]
+
 [dependencies]
 
 [dev-dependencies]
