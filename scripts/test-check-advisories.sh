@@ -106,6 +106,27 @@ OUT
 
 cat "$work/fx/hit.out" "$work/fx/vulnerability.out" | fixture both 1
 
+# A yanked crate's diagnostic, which has no RUSTSEC id, followed by an
+# advisory's diagnostic, which has one.
+cat - "$work/fx/hit.out" <<'OUT' | fixture yanked 1
+error[yanked]: detected yanked crate (try `cargo update -p foo`)
+   ┌─ /home/runner/work/my-project/my-project/Cargo.lock:9:1
+   │
+ 9 │ foo 0.1.0 registry+https://github.com/rust-lang/crates.io-index
+   │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ yanked version
+   │
+   ├ foo v0.1.0
+     └── my-project v0.1.0
+
+OUT
+
+# An advisory's description, as cargo deny prints it below the `ID:`
+# line, with a paragraph break and another advisory named.
+awk '{ print } /├ ID: RUSTSEC-2025-0141/ {
+        print "   ├ Development has ceased."
+        print "    "
+        print "    It supersedes RUSTSEC-2020-0071 for this crate." }' "$work/fx/hit.out" | fixture described 1
+
 fixture broken 1 <<'OUT'
 2026-10-10 14:12:54 [ERROR] failed to acquire advisory database lock: failed to obtain lock file '/nonexistent/advisory-dbs': failed to create parent directories for lock path
 OUT
@@ -195,6 +216,13 @@ cp "$work/out" "$work/more.txt"
 run both both
 cp "$work/out" "$work/spread.txt"
 
+run yanked clean
+expect "a yanked crate is a hit" 1 "error[yanked]: detected yanked crate"
+cp "$work/out" "$work/yanked.txt"
+
+run described clean
+cp "$work/out" "$work/described.txt"
+
 git -C "$repo" rm -q --cached Cargo.lock fuzz/Cargo.lock naïve/Cargo.lock
 run clean clean
 expect "no tracked Cargo.lock is broken, not clean" 2 ""
@@ -218,10 +246,14 @@ commented() {
     echo "ok: $name"
 }
 
-# lacks NAME FILE TEXT: FILE must not contain TEXT.
+# lacks NAME FILE TEXT: passes when FILE exists and does not contain
+# TEXT. `grep -q` exits non-zero both for no match and for a missing file,
+# so the file's existence is checked first.
 lacks() {
-    if grep -qF -- "$3" "$2"; then
-        fail "$1" "$2"
+    if [ ! -f "$2" ]; then
+        fail "$1: $(basename "$2") was not written"
+    elif grep -qF -- "$3" "$2"; then
+        fail "$1: $(basename "$2") contained '$3'" "$2"
     else
         echo "ok: $1"
     fi
@@ -244,12 +276,6 @@ trees() {
     awk -v n="$1" '{ line[NR] = $0 }
         END { for (i = 1; i <= n; i++) for (j = 1; j <= NR; j++) {
             l = line[j]; sub(/\(Cargo\.lock\)/, "(crates/c" i "/Cargo.lock)", l); print l } }' "$work/report.txt"
-}
-
-# notes N: N lines of triage notes.
-notes() {
-    awk -v n="$1" 'BEGIN { for (i = 1; i <= n; i++)
-        printf "Triage note %d: still waiting on an upstream release of this crate.\n", i }'
 }
 
 rendered() {
@@ -279,10 +305,30 @@ sed 's/Cargo\.lock:13:1/Cargo.lock:17:1/; s/^13 │/17 │/' "$work/report.txt" 
 render "$work/opened.txt" "$work/moved.txt"
 rendered "a finding whose lockfile line moved refreshes without a comment" refreshed "Cargo.lock:17:1"
 
+# Upstream can retitle an advisory. Findings are matched by RUSTSEC id,
+# so a new title alone only refreshes the body.
+sed 's/Bincode is unmaintained/Bincode is no longer maintained/' "$work/report.txt" > "$work/retitled.txt"
+render "$work/opened.txt" "$work/retitled.txt"
+rendered "a retitled advisory refreshes without a comment" refreshed "Bincode is no longer maintained"
+
+# cargo deny prints each advisory's description below its `ID:` line,
+# with whitespace-only lines between paragraphs, and the text can name
+# other advisories. Only the `ID:` line names the finding.
+render "$work/opened.txt" "$work/described.txt"
+rendered "an advisory's description is not a finding" refreshed "It supersedes RUSTSEC-2020-0071"
+
+# A yanked crate has no id, so it is matched by its headline.
+render "$work/empty.txt" "$work/yanked.txt"
+cp "$work/body.txt" "$work/yanked-opened.txt"
+render "$work/yanked-opened.txt" "$work/report.txt"
+rendered "a yanked crate that is fixed is a change" changed "RUSTSEC-2025-0141"
+commented "and the comment names it as resolved by its headline" "Resolved:" "error[yanked]: detected yanked crate"
+
 render "$work/opened.txt" "$work/more.txt"
 rendered "a new finding is a change" changed "RUSTSEC-2021-0003"
-commented "and the comment names it, and links the run log" \
-    "New:" "cargo deny check advisories (fuzz/Cargo.lock): RUSTSEC-2021-0003" "(https://example.invalid/run)"
+commented "and the comment names it by id and title, and links the run log" \
+    "New:" "cargo deny check advisories (fuzz/Cargo.lock): RUSTSEC-2021-0003 (error[vulnerability]: Buffer overflow in SmallVec::insert_many)" \
+    "(https://example.invalid/run)"
 cp "$work/body.txt" "$work/more-opened.txt"
 
 render "$work/more-opened.txt" "$work/report.txt"
@@ -295,14 +341,6 @@ commented "and the comment names it as resolved" \
 cp "$work/body.txt" "$work/two-trees.txt"
 render "$work/two-trees.txt" "$work/spread.txt"
 rendered "a known advisory reaching another lockfile is a change" changed "RUSTSEC-2021-0003"
-
-{ printf 'Earlier: <!-- /advisory-report -->\n\n'; cat "$work/opened.txt"; } > "$work/stray.txt"
-render "$work/stray.txt" "$work/report.txt"
-rendered "an end marker before the report does not duplicate it" unchanged "RUSTSEC-2025-0141"
-
-{ printf 'Earlier: <!-- advisory-report -->\n\n'; cat "$work/opened.txt"; } > "$work/stray-start.txt"
-render "$work/stray-start.txt" "$work/report.txt"
-rendered "a start marker before the report does not duplicate it" unchanged "RUSTSEC-2025-0141"
 
 # An advisory title is community-authored; one holding a fence must not
 # close the report's and render the rest as markdown.
@@ -329,9 +367,19 @@ sed 's/Cargo\.lock:13:1/Cargo.lock:17:1/' "$work/huge.txt" > "$work/huge-moved.t
 render "$work/huge-opened.txt" "$work/huge-moved.txt"
 rendered "an oversized report with the same findings leaves the issue alone" unchanged "crates/c1/Cargo.lock"
 
-printf 'Triage: waiting on syntect.\n\n%s\n' "$(cat "$work/opened.txt")" > "$work/noted.txt"
-render "$work/noted.txt" "$work/more.txt"
-rendered "triage notes outside the report survive an update" changed "Triage: waiting on syntect."
+# The workflow owns the body. A note someone added to it is gone at the
+# next update. Findings are read only from the report's fence, so a
+# diagnostic pasted from the run log below it is not a finding, and with
+# the same findings that update is only a refresh.
+{ cat "$work/opened.txt"; printf '\nPasted from the log:\n'; sed -n '/^error\[vulnerability\]/,/├ ID:/p' "$work/fx/vulnerability.out"; } > "$work/noted.txt"
+render "$work/noted.txt" "$work/report.txt"
+rendered "a body edited by hand is rewritten whole" refreshed "RUSTSEC-2025-0141"
+lacks "and the edit is gone" "$work/body.txt" "Pasted from the log:"
+
+printf 'Hand-written body with no report.\n' > "$work/bare.txt"
+render "$work/bare.txt" "$work/report.txt"
+rendered "a body with no report gains one" changed "RUSTSEC-2025-0141"
+commented "and the comment lists its findings as new" "New:" "RUSTSEC-2025-0141"
 
 # Even the findings alone can outgrow the limit; the cut must keep its
 # notice and whole lines.
@@ -350,31 +398,29 @@ rendered "a new finding in a cut report is a change" changed "RUSTSEC-2021-0003"
 commented "and the comment names it" "crates/c0/Cargo.lock): RUSTSEC-2021-0003"
 lacks "and findings pushed past the cut are not called resolved" "$work/comment.txt" "Resolved:"
 
-# Triage notes count toward the limit as well as the report does.
-{ notes 600; cat "$work/opened.txt"; } > "$work/long-notes.txt"
-render "$work/long-notes.txt" "$work/huge.txt"
-rendered "long triage notes and an oversized report" changed "Triage note 600:"
-fits "still fit together"
-
-# Notes that leave no room at all: the findings are still live, so this
-# is no change, whatever the body could show.
-{ notes 1100; cat "$work/opened.txt"; } > "$work/longer-notes.txt"
-render "$work/longer-notes.txt" "$work/report.txt"
-rendered "notes too long to leave room for the report do not resolve its findings" refreshed "Triage note 1100:"
-
-# Both markers kept around a report someone reshaped by hand.
-sed 's|^<!-- advisory-report -->$|&\n<details>\n|' "$work/opened.txt" > "$work/reshaped.txt"
-render "$work/reshaped.txt" "$work/report.txt"
-rendered "a reshaped report between intact markers is replaced, not duplicated" refreshed "RUSTSEC-2025-0141"
-if [ "$(grep -cF '<!-- advisory-report -->' "$work/body.txt")" -eq 1 ]; then
-    echo "ok: and the body holds one report"
+# Wherever the size cut falls, it keeps or drops each finding whole
+# (headline and id together): a headline kept without its id reads as a
+# new finding and posts a comment. Every room from 0 to the report's full
+# length is tried, in one Python process, since starting one per room is
+# slow. -B keeps Python from writing a __pycache__ beside the renderer.
+split_at=$(python3 -I -B - "$renderer" "$work/spread.txt" "$work/yanked.txt" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("renderer", sys.argv[1])
+renderer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(renderer)
+for path in sys.argv[2:]:
+    report = open(path).read()
+    live = renderer.findings(report).keys()
+    bad = [room for room in range(len(report)) if not renderer.findings(renderer.section(report, room)).keys() <= live]
+    if bad:
+        print(path, *bad[:5])
+PY
+)
+if [ -z "$split_at" ]; then
+    echo "ok: no cut point shows a finding the full report lacks"
 else
-    fail "a reshaped report left two reports in the body" "$work/body.txt"
+    fail "a cut showed a finding the full report lacks (report, then rooms): $split_at"
 fi
-
-printf 'Hand-written body with no markers.\n' > "$work/bare.txt"
-render "$work/bare.txt" "$work/report.txt"
-rendered "a body without markers keeps its text and gains the report" changed "Hand-written body with no markers."
 
 if [ "$failures" -ne 0 ]; then
     echo "$failures check(s) failed"

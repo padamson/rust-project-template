@@ -85,11 +85,12 @@ jobs:
           jq -j '.body // ""' "$RUNNER_TEMP/issue.json" > "$RUNNER_TEMP/old.txt"
           echo "number=$(jq -r '.number // ""' "$RUNNER_TEMP/issue.json")" >> "$GITHUB_OUTPUT"
 
-      # scripts/advisory-issue-body.py rewrites only the report section of
-      # the body, says whether the findings changed, and writes the comment
-      # that lists what came and went. The report reaches it as a file,
-      # never through `${{ }}` interpolation: advisory text is
-      # community-authored and could otherwise be evaluated by the shell.
+      # scripts/advisory-issue-body.py writes the whole body (triage goes in
+      # comments, which a rewrite leaves alone), says whether the findings
+      # changed, and writes the comment that lists what came and went. The
+      # report reaches it as a file, never through `${{ }}` interpolation:
+      # advisory text is community-authored and could otherwise be
+      # evaluated by the shell.
       #
       # A report from a partly broken check is missing the broken trees, so
       # it never overwrites an open issue: that would drop their findings
