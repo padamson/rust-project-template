@@ -51,7 +51,10 @@ These settings cannot be configured via code and must be set in the GitHub UI.
   Leave `Semver preview` off the list. It is the early warning for the
   release's semver gate, and on 0.x a deliberate breaking change turns it
   red until the release that bumps the version, which would block every
-  merge in between.
+  merge in between. Leave off `dependabot-auto-merge.yml`'s two jobs,
+  `Hold a PR that edits this workflow` and `Enable auto-merge`, too: they
+  are the merge machinery, not checks on the change, and the hold's red is
+  what marks a PR you merge by hand (Dependabot auto-merge, below).
 
   **Leave "require branches to be up to date" off** (`strict: false`).
   With it on, the second green Dependabot PR of the week is stale the moment
@@ -125,14 +128,16 @@ These settings cannot be configured via code and must be set in the GitHub UI.
 A merge made with the default `GITHUB_TOKEN` starts no workflows, so
 `main` would never get a push run for a Dependabot merge: nothing would
 test the tree two sibling bumps leave behind, and push-only jobs would not
-run. Until the App and its secrets exist, the workflow's first step fails,
-so every Dependabot PR shows a red **Enable auto-merge** check and waits
-for you to merge it by hand. That check is not required, so the red is a
-reminder, not a block. The same red, with an error naming the file, marks
-a Dependabot PR that edits `dependabot-auto-merge.yml` itself: the job
-stops before minting a token, since a bump of the token action would
-otherwise run with the App's key before review. Read the bump and merge
-it by hand.
+run. Until the App and its secrets exist, minting the token fails, so
+every Dependabot PR shows a red **Enable auto-merge** check and waits for
+you to merge it by hand. That check is not required, so the red is a
+reminder, not a block. A Dependabot PR that edits
+`dependabot-auto-merge.yml` itself shows a red **Hold a PR that edits this
+workflow** check instead, and **Enable auto-merge** is skipped: a bump of
+the token action would otherwise run with the App's key before review.
+Read the bump and merge it by hand. `dependabot.yml` keeps that action out
+of the weekly actions group, so its bump arrives as a PR of its own and
+the rest of the week's action bumps still merge on their own.
 
 - [ ] **Settings > General > Pull Requests:** turn on "Allow auto-merge"
   and "Automatically delete head branches". With auto-merge off, the
