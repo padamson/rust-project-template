@@ -78,12 +78,17 @@ what a pass looks like; CI is the backstop, not the plan.
   below). A pass is one entry per skill in `ls -l .claude/skills/`.
 - A new public API's rustdoc: `cargo doc --open`, since `open` is blocked
   in the sandbox.
+- The GitHub settings, until the release ceremony deletes the script:
+  `./scripts/github-settings.sh` (`--apply` to set what is off), after
+  setup and after any change to the required checks or release tags
+  (SETUP.md, "GitHub settings", lists what it sets). A pass is exit 0
+  with only `ok` and `manual` lines. A session never runs it: these are admin
+  changes, and its `gh` calls fail in the sandbox on purpose.
 
-**Not from a session at all**, changed on github.com or crates.io: the
-`main` branch protection and its required checks, the `release tags`
-ruleset, Allow auto-merge and automatic head-branch deletion, the merge
-App and its two Dependabot secrets, Dependabot alerts and security
-updates, and the crate's Trusted Publisher (SETUP.md has each).
+**Not from a session at all**, changed on github.com or crates.io:
+creating the merge App, installing it on the repo and generating its key,
+Dependabot malware alerts, and the crate's Trusted Publisher (SETUP.md
+has each).
 
 **By eye:**
 

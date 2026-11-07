@@ -24,103 +24,119 @@ After creating a repo from this template, complete these steps.
 - [ ] Update `CLAUDE.md` with project-specific context
 - [ ] Strip `<!-- Template users: ... -->` and similar meta-comments from `README.md` and `CLAUDE.md` after the placeholder substitutions
 
-## GitHub Settings (manual)
+## GitHub settings
 
-These settings cannot be configured via code and must be set in the GitHub UI.
+`scripts/github-settings.sh` sets the repository settings no file in the
+tree can carry, and reports what it could not set. Run it from your own
+terminal. In a Claude Code session every `gh` call inside it runs
+sandboxed and fails, on purpose: these are admin changes to the repo, so
+a session does not get to make them. It needs admin on the repo and a
+`gh` token with the `repo` scope (`gh auth login`'s default); no extra
+scope.
 
-### Repository settings
+```bash
+./scripts/github-settings.sh              # report, change nothing
+./scripts/github-settings.sh --apply      # set whatever is off
+./scripts/github-settings.sh --apply \
+    --app-client-id <id> --app-key <app>.private-key.pem
+                                          # also write the merge App's secrets
+```
 
-- [ ] **Settings > General > Features:** Enable "Issues" and "Projects" if not already
-- [ ] **Settings > Branches > Branch protection:** Add rule for `main`.
+It prints one line per setting: `ok`, `set` (changed by this run),
+`DRIFT`, `FAILED`, `UNREAD` (`gh` could not read it, so never counted as
+drift), or `manual` (no API it can use). It exits 0 when nothing is
+`DRIFT`, `FAILED` or `UNREAD`.
 
-  **Apply protection only after the first PR has merged** — otherwise the rules block the very PR that first makes the required checks real.
+- [ ] **Create the merge App** (one App serves every repo you own; skip
+  this if you have it). **Settings > Developer settings > GitHub Apps >
+  New GitHub App**: any name and homepage URL, webhook off, and repository
+  permissions **Contents**, **Pull requests** and **Workflows** set to
+  read and write. Workflows is there because Dependabot's actions bumps
+  edit files under `.github/workflows/`. Note the **Client ID**.
+- [ ] **Install the App** on this repo: the App's page > **Install App** >
+  your account > **Only select repositories**. Then, on the App's page,
+  generate a private key for this repo and save the `.pem`.
+- [ ] **Run the script with `--apply` and the App's flags**, then once
+  more with no flags. A pass is exit 0 with only `ok` and `manual` lines.
+- [ ] **Turn on Dependabot malware alerts**, which the script cannot
+  reach: **Settings > Security and quality > Advanced Security >
+  Dependabot > Malware alerts**.
+- [ ] **Delete the local `.pem`** once the secret is set. Don't delete the
+  key on the App's page: every other repo the App is installed on holds
+  that key as its secret, and deleting it breaks auto-merge in all of
+  them. An App holds several keys at once, so a new repo gets a new key.
+  To retire a key on purpose, set the new one as the secret in every repo
+  first (the script with `--apply` and the App's flags writes the secrets
+  even when they exist), then delete the old one.
+- [ ] **Never add the App to the branch protection bypass list.** Its
+  merges would then skip the required checks.
+- [ ] **Prove it.** With Dependabot security updates on and an advisory
+  open, a PR arrives right away, since security updates ignore the
+  cooldown; otherwise wait for the weekly run. The merged PR's
+  `merged_by` should be the App's bot, and its merge commit should have
+  the full set of push runs on `main`.
 
-  **Require every PR-triggered job.** The required checks are the entire
-  merge gate for Dependabot: `dependabot-auto-merge.yml` enables auto-merge
-  on every Dependabot PR, and it merges the moment these are green. The
-  push run on `main` afterwards tests the merged tree but cannot stop the
-  merge. A job left off this list (Supply Chain Review is the classic
-  omission) means a bump merges with that job red.
+Rerun the script with `--apply` after any change to the required checks
+or the release tags: deleting the seed skill (it requires `Skill version
+guard` only while `skills/` exists), or adding a per-crate tag prefix to
+`release.yml` after converting to a workspace (it reads the patterns from
+that file).
 
-  - `MSRV Check` — cheap; catches accidental use of post-MSRV features
-  - `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
-  - `Test on ubuntu-latest`, `Test on macos-latest`, `Test on windows-latest`
-  - `License & Dependency Check`, `Supply Chain Review`
-  - `Mutation Testing (diff)`, `Skill version guard`
+The rest of this section is what the script sets and why. The script
+holds the values, so a change to them (a required check added or renamed)
+is made there; if this section and the script disagree, the script is what
+GitHub gets.
 
-  Leave `Semver preview` off the list. It is the early warning for the
-  release's semver gate, and on 0.x a deliberate breaking change turns it
-  red until the release that bumps the version, which would block every
-  merge in between. Leave off `dependabot-auto-merge.yml`'s two jobs,
-  `Hold a PR that edits this workflow` and `Enable auto-merge`, too: they
-  are the merge machinery, not checks on the change, and the hold's red is
-  what marks a PR you merge by hand (Dependabot auto-merge, below).
+### Branch protection on `main`
 
-  **Leave "require branches to be up to date" off** (`strict: false`).
-  With it on, the second green Dependabot PR of the week is stale the moment
-  the first merges, auto-merge never updates branches, and Dependabot only
-  rebases on a conflict, so PRs sit blocked until someone clicks "update
-  branch" and every rebase re-runs CI. Off, each green PR merges once. The
-  residual risk (two green PRs that conflict semantically without
-  conflicting in git) is negligible for Dependabot: cargo PRs always collide
-  on `Cargo.lock` and get rebased and re-tested, and an actions bump beside
-  a cargo bump touches disjoint files.
+**Every PR-triggered job is required.** The required checks are the
+entire merge gate for Dependabot: `dependabot-auto-merge.yml` enables
+auto-merge on every Dependabot PR, and it merges the moment these are
+green. The push run on `main` afterwards tests the merged tree but cannot
+stop the merge. A job left off this list (Supply Chain Review is the
+classic omission) means a bump merges with that job red.
 
-  Either click through the UI, or apply via `gh api` (requires `admin:repo` scope — run `gh auth refresh -s admin:repo` first if needed):
+- `MSRV Check` — cheap; catches accidental use of post-MSRV features
+- `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
+- `Test on ubuntu-latest`, `Test on macos-latest`, `Test on windows-latest`
+- `License & Dependency Check`, `Supply Chain Review`
+- `Mutation Testing (diff)`, `Skill version guard`
 
-  ```bash
-  gh api -X PUT repos/OWNER/REPO/branches/main/protection \
-    --input - <<'JSON'
-  {
-    "required_status_checks": {
-      "strict": false,
-      "checks": [
-        {"context": "MSRV Check"},
-        {"context": "Lint"},
-        {"context": "Test on ubuntu-latest"},
-        {"context": "Test on macos-latest"},
-        {"context": "Test on windows-latest"},
-        {"context": "License & Dependency Check"},
-        {"context": "Supply Chain Review"},
-        {"context": "Mutation Testing (diff)"},
-        {"context": "Skill version guard"}
-      ]
-    },
-    "enforce_admins": false,
-    "required_pull_request_reviews": null,
-    "restrictions": null,
-    "required_linear_history": false,
-    "allow_force_pushes": false,
-    "allow_deletions": false,
-    "required_conversation_resolution": true
-  }
-  JSON
-  ```
+`Semver preview` stays off the list. It is the early warning for the
+release's semver gate, and on 0.x a deliberate breaking change turns it
+red until the release that bumps the version, which would block every
+merge in between. `dependabot-auto-merge.yml`'s two jobs, `Hold a PR that
+edits this workflow` and `Enable auto-merge`, stay off too: they are the
+merge machinery, not checks on the change, and the hold's red is what
+marks a PR you merge by hand (Dependabot auto-merge, below).
 
-- [ ] **Settings > Rules > Rulesets > New tag ruleset:** restrict
-  creation, update and deletion of release tags, with the Repository admin
-  role as the only bypass. The merge App's token can push a tag, a tag
-  pushed with it starts `release.yml` (one pushed with `GITHUB_TOKEN`
-  would not), and the release publishes through Trusted Publishing, so
-  without the ruleset a leaked App key could release any commit. Cover
-  every pattern under `on.push.tags` in `release.yml`: `v*` here, plus
-  any per-crate prefix you add after converting to a workspace.
+**"Require branches to be up to date" stays off** (`strict: false`).
+With it on, the second green Dependabot PR of the week is stale the moment
+the first merges, auto-merge never updates branches, and Dependabot only
+rebases on a conflict, so PRs sit blocked until someone clicks "update
+branch" and every rebase re-runs CI. Off, each green PR merges once. The
+residual risk (two green PRs that conflict semantically without
+conflicting in git) is negligible for Dependabot: cargo PRs always collide
+on `Cargo.lock` and get rebased and re-tested, and an actions bump beside
+a cargo bump touches disjoint files.
 
-  ```bash
-  gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
-  {
-    "name": "release tags",
-    "target": "tag",
-    "enforcement": "active",
-    "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
-    "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
-    "bypass_actors": [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
-  }
-  JSON
-  ```
+**Protection waits until every required check has reported on `main`.**
+A required check that never reports holds every PR forever. The script
+reports any that has not reported on `main`'s HEAD on a line of its own,
+and `--apply` refuses to protect `main` until they all have. On a fresh
+repo the initial push's runs already satisfy it, so protection can go on
+at once.
 
-  Your own `git push origin main --tags` still works through the admin
-  bypass.
+### Release-tag ruleset
+
+A tag ruleset named `release tags` restricts creation, update and
+deletion of release tags, with the Repository admin role as the only
+bypass. The merge App's token can push a tag, a tag pushed with it starts
+`release.yml` (one pushed with `GITHUB_TOKEN` would not), and the release
+publishes through Trusted Publishing, so without the ruleset a leaked App
+key could release any commit. It covers every pattern under
+`on.push.tags` in `release.yml`. Your own `git push origin main --tags`
+still works through the admin bypass.
 
 ### Dependabot auto-merge
 
@@ -139,56 +155,22 @@ Read the bump and merge it by hand. `dependabot.yml` keeps that action out
 of the weekly actions group, so its bump arrives as a PR of its own and
 the rest of the week's action bumps still merge on their own.
 
-- [ ] **Settings > General > Pull Requests:** turn on "Allow auto-merge"
-  and "Automatically delete head branches". With auto-merge off, the
-  workflow's `gh pr merge --auto` fails and nothing merges.
+The script turns on **Allow auto-merge** (with it off, the workflow's `gh
+pr merge --auto` fails and nothing merges) and **Automatically delete
+head branches**. It sets the App's Client ID and private key as
+**Dependabot secrets**, not Actions secrets, because a Dependabot-triggered
+run can read only Dependabot secrets.
 
-  ```bash
-  gh api -X PATCH repos/OWNER/REPO \
-    -F allow_auto_merge=true -F delete_branch_on_merge=true
-  ```
-
-- [ ] **Create the App** (one App serves every repo you own; skip to the
-  install if you have it). **Settings > Developer settings > GitHub Apps >
-  New GitHub App**: any name and homepage URL, webhook off, and repository
-  permissions **Contents**, **Pull requests** and **Workflows** set to
-  read and write. Workflows is there because Dependabot's actions bumps
-  edit files under `.github/workflows/`. Note the **Client ID**, then
-  generate a private key and save the `.pem`.
-- [ ] **Install the App** on this repo: the App's page > **Install App** >
-  your account > **Only select repositories**.
-- [ ] **Add the two secrets as Dependabot secrets**, not Actions secrets.
-  A Dependabot-triggered run can read only Dependabot secrets.
-
-  ```bash
-  gh secret set AUTOMERGE_APP_CLIENT_ID --app dependabot --body <client-id>
-  gh secret set AUTOMERGE_APP_PRIVATE_KEY --app dependabot < <app>.private-key.pem
-  ```
-
-  The private key mints tokens for every repo the App is installed on, so
-  install it only where everyone with write access could be trusted with
-  all of them; a repo with outside collaborators gets its own App. Delete
-  the local `.pem` once the secret is set. If the key is needed again,
-  generate a new one on the App's page and delete the old one there.
-
-- [ ] **Never add the App to the branch protection bypass list.** Its
-  merges would then skip the required checks.
-- [ ] **Prove it.** With Dependabot security updates on (Code security,
-  below) and an advisory open, a PR arrives right away, since security
-  updates ignore the cooldown; otherwise wait for the weekly run. The
-  merged PR's `merged_by` should be the App's bot, and its merge commit
-  should have the full set of push runs on `main`.
+The private key mints tokens for every repo the App is installed on, so
+install it only where everyone with write access could be trusted with
+all of them; a repo with outside collaborators gets its own App.
 
 ### Code security
 
-- [ ] **Settings > Code security and analysis** (`/settings/security_analysis`): Enable:
-  - Private vulnerability reporting
-  - Dependabot alerts
-  - Dependabot security updates
-  - Dependabot malware alerts
-  - Code scanning (CodeQL) via default setup
-  - Secret scanning
-  - Push protection
+The script turns on private vulnerability reporting, Dependabot alerts,
+Dependabot security updates, CodeQL default setup, secret scanning, and
+push protection. Issues stay on, since the advisory monitor files its
+tracking issue there.
 
 ### crates.io Trusted Publishing
 
@@ -392,8 +374,9 @@ Decide now:
 - [ ] **Don't ship one.** Delete `skills/`,
   `scripts/check-skill-version-bumped.sh`, the `skill-version-bumped`
   hook in `.pre-commit-config.yaml`, the `skill-version` job in
-  `test.yml`, and the "Agent skill" block in `README.md`, and drop
-  `Skill version guard` from the required checks.
+  `test.yml`, and the "Agent skill" block in `README.md`, then rerun
+  `./scripts/github-settings.sh --apply` to drop `Skill version guard`
+  from the required checks.
 
 Skills of the tools this crate depends on are the other direction, and
 CLAUDE.md covers them: `npx skills add <owner>/<repo>` once per clone,
@@ -544,7 +527,8 @@ Only run this after every box above is checked and your first feature PR has mer
    - Change `[Unreleased]` to `https://github.com/OWNER/REPO/compare/vX.Y.Z...HEAD`.
    - Add `[X.Y.Z]: https://github.com/OWNER/REPO/releases/tag/vX.Y.Z`.
 3. Update the version in `Cargo.toml` to `X.Y.Z`.
-4. Remove this file — you won't need it again: `git rm SETUP.md`.
+4. Remove this file and the settings script — you won't need them again:
+   `git rm SETUP.md scripts/github-settings.sh`.
 5. Commit, tag, push:
    ```bash
    git add Cargo.toml CHANGELOG.md
