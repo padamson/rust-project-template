@@ -80,11 +80,11 @@ required_checks() {
   if [ -d skills ]; then echo "Skill version guard"; fi
 }
 
-# Every tag pattern release.yml triggers on, so the ruleset covers each.
-# Blank and comment lines inside the list are skipped and a trailing
-# comment is cut, since a pattern missed here is a tag the ruleset leaves
-# open. A shape this does not read (a flow list, other indentation) yields
-# no patterns, which check_ruleset reports as UNREAD.
+# Every tag pattern release.yml triggers on, for the ruleset and the release
+# environment. Blank and comment lines inside the list are skipped and a
+# trailing comment is cut, since a pattern missed here is a tag the ruleset
+# leaves open. A shape this does not read (a flow list, other indentation)
+# yields no patterns, which read_tag_patterns reports as unreadable.
 tag_patterns() {
   awk '
     /^on:/ { on = 1; next }
@@ -97,6 +97,22 @@ tag_patterns() {
     }
     tags { exit }
   ' .github/workflows/release.yml
+}
+
+# Sets $patterns (declare it local), or returns 2 with $detail set. `+`, `?`
+# and a leading `!` mean something else to a workflow than to GitHub's
+# fnmatch, so a pattern with them is left to set by hand.
+read_tag_patterns() {
+  local odd
+  patterns=$(tag_patterns)
+  if [ -z "$patterns" ]; then
+    detail="no tag patterns found under on.push.tags in release.yml"; return 2
+  fi
+  odd=$(printf '%s\n' "$patterns" | grep -E '[+?]|^!' | paste -sd, -) || :
+  if [ -n "$odd" ]; then
+    detail="release.yml tag patterns GitHub would match differently here: $odd; set this by hand"
+    return 2
+  fi
 }
 
 status=0
@@ -251,21 +267,9 @@ ruleset_want() {
   includes=$(printf '%s\n' "$1" | sed 's|^|refs/tags/|' | LC_ALL=C sort | paste -sd, -)
   echo "tag active $includes creation,deletion,update RepositoryRole:5:always"
 }
-# A workflow reads `+` and `?` as quantifiers and a leading `!` as a
-# negation; a ruleset matches them as fnmatch characters. Copied across, such
-# a pattern misses the tags it names while the check still reads ok, so it
-# is reported unreadable and the ruleset is left alone.
 check_ruleset() {
-  local id have want odd patterns
-  patterns=$(tag_patterns)
-  if [ -z "$patterns" ]; then
-    detail="no tag patterns found under on.push.tags in release.yml"; return 2
-  fi
-  odd=$(printf '%s\n' "$patterns" | grep -E '[+?]|^!' | paste -sd, -) || :
-  if [ -n "$odd" ]; then
-    detail="release.yml tag patterns a ruleset would read differently: $odd; set the ruleset by hand"
-    return 2
-  fi
+  local id have want patterns
+  read_tag_patterns || return 2
   want=$(ruleset_want "$patterns")
   id=$(ruleset_id 2>&1) || { detail=$id; return 2; }
   if [ -z "$id" ]; then detail="no ruleset named \"$ruleset_name\""; return 1; fi
@@ -278,8 +282,9 @@ check_ruleset() {
   detail="have \"$have\", want \"$want\""; return 1
 }
 fix_ruleset() {
-  local id includes method=POST path="repos/$repo/rulesets"
-  includes=$(tag_patterns | sed 's|.*|"refs/tags/&"|' | paste -sd, -)
+  local id includes patterns method=POST path="repos/$repo/rulesets"
+  read_tag_patterns || return 1
+  includes=$(printf '%s\n' "$patterns" | sed 's|.*|"refs/tags/&"|' | paste -sd, -)
   id=$(ruleset_id 2>&1) || { detail=$id; return 1; }
   if [ -n "$id" ]; then method=PUT; path="$path/$id"; fi
   gh_set api -X "$method" "$path" --input - <<JSON
@@ -292,6 +297,61 @@ fix_ruleset() {
   "bypass_actors": [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
 }
 JSON
+}
+
+# --- Release environment: only release tags deploy to it ---------------------
+env_name=release
+env_api="repos/$repo/environments/$env_name"
+env_policies_api="$env_api/deployment-branch-policies"
+check_environment() {
+  local have policies want patterns
+  read_tag_patterns || return 2
+  want="false true $(printf '%s\n' "$patterns" | sed 's|^|tag:|' | LC_ALL=C sort | paste -sd, -)"
+  if ! have=$(gh api "$env_api" --jq '.deployment_branch_policy
+      | "\(.protected_branches) \(.custom_branch_policies)"' 2>&1); then
+    case $have in
+      *"Not Found"*) detail="no environment named \"$env_name\""; return 1 ;;
+      *) detail=$have; return 2 ;;
+    esac
+  fi
+  if [ "$have" = "false true" ]; then
+    policies=$(gh api "$env_policies_api?per_page=100" \
+      --jq '[.branch_policies[] | "\(.type):\(.name)"] | sort | join(",")' 2>&1) || { detail=$policies; return 2; }
+    have="$have $policies"
+  fi
+  [ "$have" = "$want" ] && return 0
+  detail="have \"$have\", want \"$want\""; return 1
+}
+# PUT only a missing or unrestricted environment, sending its reviewers,
+# wait timer and admin bypass back (GitHub doesn't say what a PUT drops).
+# Then replace every deployment policy with the tag patterns.
+fix_environment() {
+  local body ids id pattern patterns
+  read_tag_patterns || return 1
+  # shellcheck disable=SC2016  # $r is jq's
+  body=$(gh api "$env_api" --jq '(.protection_rules // []) as $r
+      | if .deployment_branch_policy.protected_branches == false
+           and .deployment_branch_policy.custom_branch_policies == true then empty
+        else {
+          wait_timer: ([$r[] | select(.type == "wait_timer") | .wait_timer] | first // 0),
+          prevent_self_review: ([$r[] | select(.type == "required_reviewers") | .prevent_self_review] | first // false),
+          reviewers: [$r[] | select(.type == "required_reviewers") | .reviewers[] | {type, id: .reviewer.id}],
+          can_admins_bypass: (.can_admins_bypass != false),
+          deployment_branch_policy: {protected_branches: false, custom_branch_policies: true}
+        } end' 2>&1) || case $body in
+    *"Not Found"*) body='{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}' ;;
+    *) detail=$body; return 1 ;;
+  esac
+  if [ -n "$body" ]; then
+    gh_set api -X PUT "$env_api" --input - <<<"$body" || return 1
+  fi
+  ids=$(gh api "$env_policies_api?per_page=100" --jq '.branch_policies[].id' 2>&1) || { detail=$ids; return 1; }
+  for id in $ids; do
+    gh_set api -X DELETE "$env_policies_api/$id" </dev/null || return 1
+  done
+  while IFS= read -r pattern; do
+    gh_set api -X POST "$env_policies_api" -f name="$pattern" -f type=tag </dev/null || return 1
+  done <<<"$patterns"
 }
 
 # --- Required checks have all reported on main --------------------------------
@@ -384,6 +444,7 @@ run_item "Dependabot alerts" check_alerts fix_alerts
 run_item "Dependabot security updates" check_security_updates fix_security_updates
 run_item "CodeQL default setup" check_codeql fix_codeql async
 run_item "Ruleset \"$ruleset_name\" on release.yml's tags" check_ruleset fix_ruleset
+run_item "Environment \"$env_name\" deploys only release.yml's tags" check_environment fix_environment
 run_item "Required checks have reported on main" check_reported ""
 run_item "Branch protection on main" check_protection fix_protection
 run_item "Merge App secrets (Dependabot)" check_app_secrets fix_app_secrets "${app_client_id:+force}"

@@ -134,9 +134,30 @@ deletion of release tags, with the Repository admin role as the only
 bypass. The merge App's token can push a tag, a tag pushed with it starts
 `release.yml` (one pushed with `GITHUB_TOKEN` would not), and the release
 publishes through Trusted Publishing, so without the ruleset a leaked App
-key could release any commit. It covers every pattern under
+key could release any commit by tagging it. It covers every pattern under
 `on.push.tags` in `release.yml`. Your own `git push origin main --tags`
 still works through the admin bypass.
+
+### Release environment
+
+`release.yml`'s publish job runs in an environment named `release`, and
+the script lets only tags matching `on.push.tags` deploy to it (no
+branches). The crates.io trusted publisher checks the repository and the
+workflow's filename, not the ref a run came from, and the App's Workflows
+permission lets it push a branch carrying its own `release.yml`, one that
+runs on that push or on a tag the ruleset does not cover. Without the
+environment, that run could mint a publish token. With it, the run either
+names the environment and its deployment policy refuses it, or leaves the
+environment out and gets a token crates.io refuses, because the publisher
+names `release` (crates.io Trusted Publishing, below). The App can change
+neither the environment nor the ruleset: both need admin. Name the
+environment in the publisher only once the script reports it `ok`: a run
+that names an environment GitHub does not have creates it open to every
+branch.
+
+To approve each publish by hand, add required reviewers to the
+environment (**Settings > Environments > release**). The script keeps
+reviewers and a wait timer set there.
 
 ### Dependabot auto-merge
 
@@ -178,7 +199,7 @@ The release workflow publishes with a short-lived token minted from
 GitHub's OIDC identity for this repo and this workflow. There is no
 `CARGO_REGISTRY_TOKEN` secret to create, leak, or rotate.
 
-- [ ] On crates.io, for your crate: **Settings > Trusted Publishing > Add a GitHub publisher** with owner `OWNER`, repository `REPO`, workflow `release.yml`, and no environment (unless you add one below).
+- [ ] On crates.io, for your crate: **Settings > Trusted Publishing > Add a GitHub publisher** with owner `OWNER`, repository `REPO`, workflow `release.yml`, and environment `release` (Release environment, above).
 
   A crate that has never been published has no settings page yet. Publish
   the first version from your machine with a token scoped to
@@ -201,10 +222,6 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   [policy.<crate>]
   audit-as-crates-io = false
   ```
-
-### Environments (optional)
-
-- [ ] Create `release` environment with required reviewers if you want manual approval before publishing
 
 ## Local setup
 
@@ -438,11 +455,11 @@ a proc-macro crate, a separate binary), not before.
    crates.io. If one crate depends on another, replace the publish step's
    `cargo metadata` list with the crates in dependency order, since cargo
    resolves each from crates.io. Each published crate needs its own
-   trusted-publisher entry and its own `audit-as-crates-io = false`
-   policy. A `v*` tag releases every publishable crate whose version is
-   not yet on crates.io; the tag's version has to match at least one of
-   them, and it names the archives and picks the CHANGELOG section for the
-   release notes. A crate new to the workspace is published by hand once,
+   trusted-publisher entry, naming environment `release` like the first,
+   and its own `audit-as-crates-io = false` policy. A `v*` tag releases
+   every publishable crate whose version is not yet on crates.io; the
+   tag's version has to match at least one of them, and it names the
+   archives and picks the CHANGELOG section for the release notes. A crate new to the workspace is published by hand once,
    like the first, before its trusted publisher can exist.
 5. Run `cargo nextest run --workspace`, `cargo clippy --all-targets
    --all-features -- -D warnings`, `cargo deny check`, and
