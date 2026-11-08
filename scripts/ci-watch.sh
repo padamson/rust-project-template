@@ -11,6 +11,11 @@
 #   ./scripts/ci-watch.sh --poll 15         # poll every 15s (default 30)
 #   ./scripts/ci-watch.sh --timeout 600     # give up after 10 minutes (default 3600)
 #
+# Exits 0 when every job and run passed, 1 when one failed, 2 when the
+# watcher could not run (a bad flag or ref, no `gh` or no login for it, or
+# no answer from GitHub before the timeout), and 3 when the timeout passed
+# with runs still going.
+#
 # Flags, not an env-var prefix: the sandbox exclusion below matches the
 # command line as written, and `TIMEOUT=600 ./scripts/ci-watch.sh` is not
 # the excluded command, so it runs sandboxed and every `gh` call fails.
@@ -36,8 +41,9 @@ set -uo pipefail
 POLL="${POLL:-30}"
 TIMEOUT="${TIMEOUT:-3600}"
 REF=HEAD
-# A usage error exits 2, never 1: 1 means a job failed, and a caller
-# branching on the code would report a CI failure that never happened.
+# A usage error exits 2, never 1 or 3: 1 means a job failed and 3 that CI
+# outlasted the timeout, and a caller branching on the code would report
+# one of those when the watcher never ran.
 usage() { echo "ci-watch: $1" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,7 +51,9 @@ while [ $# -gt 0 ]; do
     --timeout) [ $# -ge 2 ] || usage "$1 needs a value"; TIMEOUT="$2"; shift 2 ;;
     --poll=*) POLL="${1#*=}"; shift ;;
     --timeout=*) TIMEOUT="${1#*=}"; shift ;;
-    -h|--help) grep '^#' "$0" | sed 's/^#\{1,\} \{0,1\}//'; exit 0 ;;
+    # The header only: from its first line of text to the first line
+    # that is not a comment.
+    -h|--help) awk 'NR > 2 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
     -*) usage "unknown flag $1" ;;
     *) REF="$1"; shift ;;
   esac
@@ -58,37 +66,69 @@ secs() {
 secs --poll "$POLL"
 secs --timeout "$TIMEOUT"
 
-SHA="$(git rev-parse "$REF")" || exit 2
+# The commit, not the ref's own object: an annotated tag names a tag
+# object, and runs are listed by the commit it points to.
+SHA="$(git rev-parse "$REF^{commit}")" || exit 2
 SHORT="${SHA:0:7}"
+command -v gh > /dev/null || { echo "ci-watch: gh is not installed" >&2; exit 2; }
 DEADLINE=$(( $(date +%s) + TIMEOUT ))
+
+# What the last `gh` call printed on stderr, shown when it fails.
+GH_ERR=$(mktemp "${TMPDIR:-/tmp}/ci-watch.XXXXXX") || exit 2
+trap 'rm -f "$GH_ERR"' EXIT
+
+# Lines already printed: "|<run>/<job>/<conclusion>|" for a job,
+# "|<run>/<conclusion>|" for a run, and the call, code and message for a
+# failed `gh` call, so a re-run's new result prints again and a failure
+# that repeats on every poll prints once.
+seen=""
+
+# gh_failed WHAT CODE: report a failed `gh` call with what it printed. gh
+# exits 4 when it has no login, which no amount of waiting fixes, so that
+# stops the watch. Anything else is retried on the next poll, since it may
+# be a network blip. That includes a sandboxed `gh`, which exits 1 on the
+# read-denied ~/.config/gh and so ends at the deadline, not at once.
+gh_failed() {
+  local said
+  said=$(sed -n 's/^./  gh: &/p' "$GH_ERR")
+  if [ "$2" -eq 4 ]; then
+    printf 'ci-watch: gh has no login; run '\''gh auth login'\'' or set GH_TOKEN\n%s\n' "$said" >&2
+    exit 2
+  fi
+  local key="|$1/$2/$said|"
+  case "$seen" in *"$key"*) return ;; esac
+  seen="$seen$key"
+  printf 'ci-watch: %s failed (exit %s), retrying every %ss\n%s\n' "$1" "$2" "$POLL" "$said"
+}
 
 # The conclusions that pass, for a job and for a run alike.
 is_green() {
   case "$1" in success|skipped|neutral) return 0 ;; *) return 1 ;; esac
 }
 
-# Lines already printed: "|<run>/<job>/<conclusion>|" for a job and
-# "|<run>/<conclusion>|" for a run, so a re-run's new result prints again.
-seen=""
+# Set once `gh run list` answers. A watch that never got an answer did
+# not see CI at all, so its deadline is "could not run", not a timeout.
+reached=0
 
 while :; do
   if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    if [ "$reached" -eq 0 ]; then
+      echo "ci-watch: never reached GitHub for $SHORT" >&2
+      exit 2
+    fi
     echo "ci-watch: TIMEOUT waiting on $SHORT"
-    exit 2
+    exit 3
   fi
 
-  # `gh` exits non-zero on a network blip; tell the difference between
-  # "cannot reach GitHub" and "no runs for this commit yet". `--commit`
-  # filters on the server, so an older commit is found however many runs
-  # have landed since. Scheduled runs are left out: they land on whatever
-  # commit main's tip was that day, and an old one that failed says
-  # nothing about the commit being watched.
-  if ! ids=$(gh run list --commit "$SHA" --limit 100 --json databaseId,event \
-        --jq '.[] | select(.event != "schedule") | .databaseId' 2>/dev/null); then
-    echo "ci-watch: could not reach GitHub, retrying in ${POLL}s"
-    sleep "$POLL"
-    continue
-  fi
+  # A failed call is told apart from "no runs for this commit yet".
+  # `--commit` filters on the server, so an older commit is found however
+  # many runs have landed since. Scheduled runs are left out: they land on
+  # whatever commit main's tip was that day, and an old one that failed
+  # says nothing about the commit being watched.
+  ids=$(gh run list --commit "$SHA" --limit 100 --json databaseId,event \
+        --jq '.[] | select(.event != "schedule") | .databaseId' 2>"$GH_ERR") ||
+    { gh_failed "gh run list" "$?"; sleep "$POLL"; continue; }
+  reached=1
 
   if [ -z "$ids" ]; then
     echo "ci-watch: no workflow runs for $SHORT yet"
@@ -102,13 +142,11 @@ while :; do
   for id in $ids; do
     # One call per run: each finished job, then the run's own state. A call
     # that fails leaves the run pending for this poll.
-    if ! view=$(gh run view "$id" --json jobs,status,conclusion,workflowName --jq '
+    view=$(gh run view "$id" --json jobs,status,conclusion,workflowName --jq '
         (.jobs[] | select(.conclusion != null and .conclusion != "")
           | "JOB\t\(.conclusion)\t\(.name)"),
-        "RUN\t\(.status)\t\(.conclusion // "-")\t\(.workflowName)"' 2>/dev/null); then
-      pending=$((pending + 1))
-      continue
-    fi
+        "RUN\t\(.status)\t\(.conclusion // "-")\t\(.workflowName)"' 2>"$GH_ERR") ||
+      { gh_failed "gh run view $id" "$?"; pending=$((pending + 1)); continue; }
     while IFS=$'\t' read -r kind a b c; do
       case "$kind" in
         JOB)

@@ -53,12 +53,14 @@ the call, so `git add -A && prek run --all-files` runs prek sandboxed and
 ```
 
 One line per job as it reaches a terminal state, then an exit code:
-0 all green, 1 something failed, 2 timed out or a usage error. A `gh`
-call inside a shell loop is not matched by the sandbox's command
-exclusion, so this script is excluded as a whole in
-`.claude/settings.json`. Pass `--poll` and `--timeout` as flags: an
-env-var prefix (`POLL=15 ./scripts/ci-watch.sh`) is not the excluded
-command, so the script runs sandboxed and every `gh` call fails.
+0 all green, 1 something failed, 2 the watcher could not run (a bad
+flag or ref, no `gh` or no login for it, no answer from GitHub before
+the timeout), 3 timed out with runs still going. A `gh` call inside a
+shell loop is not matched by the sandbox's command exclusion, so this
+script is excluded as a whole in `.claude/settings.json`. Pass
+`--poll` and `--timeout` as flags: an env-var prefix
+(`POLL=15 ./scripts/ci-watch.sh`) is not the excluded command, so the
+script runs sandboxed and every `gh` call fails.
 
 ## Manual checks
 

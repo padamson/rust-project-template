@@ -103,6 +103,9 @@ jobs:
       - name: Verify the advisory checker classifies cargo-deny output
         run: scripts/test-check-advisories.sh
 
+      - name: Verify ci-watch reports what it saw in its exit code
+        run: scripts/test-ci-watch.sh
+
   test:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
