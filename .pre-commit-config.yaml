@@ -79,10 +79,12 @@ repos:
 
       # cargo deny covers advisories too (it reads the RustSec database),
       # so there is no separate `cargo audit` hook and only one ignore
-      # list, in `deny.toml`. Advisories go through the same script as the
-      # CI gate and the monitor, which reads every tracked Cargo.lock.
-      # Both are diff-gated on purpose: an advisory published overnight
-      # should not block an unrelated commit; the scheduled
+      # list, in `deny.toml`. Advisories go through cargo-lockpatrol, the
+      # hook at the end of this file, the same checker as the CI gate and
+      # the monitor, which reads every tracked Cargo.lock.
+      # Both are diff-gated on purpose (cargo-lockpatrol's `files:` comes
+      # from its own .pre-commit-hooks.yaml): an advisory published
+      # overnight should not block an unrelated commit; the scheduled
       # advisory-monitor workflow catches those.
       - id: cargo-deny
         name: cargo deny
@@ -91,22 +93,6 @@ repos:
         language: system
         pass_filenames: false
         files: (Cargo\.toml|Cargo\.lock|deny\.toml)$
-
-      - id: cargo-deny-advisories
-        name: cargo deny advisories (every lockfile)
-        description: Check every tracked Cargo.lock against the RustSec database
-        entry: scripts/check-advisories.sh
-        language: system
-        pass_filenames: false
-        files: (Cargo\.toml|Cargo\.lock|deny\.toml)$
-
-      - id: advisory-checker-classifies-output
-        name: advisory checker still tells a hit from a broken tool
-        description: the advisory monitor runs on a schedule nobody watches, so a misclassification is silent
-        entry: scripts/test-check-advisories.sh
-        language: system
-        pass_filenames: false
-        files: ^scripts/(check-advisories\.sh|test-check-advisories\.sh|advisory-issue-body\.py)$
 
       - id: ci-watch-exit-codes
         name: ci-watch still reports what it saw in its exit code
@@ -142,3 +128,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^skills/
+
+  # Builds the binary at the pinned rev (prek runs `cargo install`), so
+  # the hook is the release the CI gate and the monitor run. Needs
+  # cargo-deny on PATH. Dependabot's pre-commit entry moves this rev.
+  - repo: https://github.com/padamson/cargo-lockpatrol
+    rev: dd236f9ba1cce97d3cde4b739b7819d76927412f  # frozen: v0.1.0
+    hooks:
+      - id: cargo-lockpatrol
