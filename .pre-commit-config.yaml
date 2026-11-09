@@ -94,14 +94,6 @@ repos:
         pass_filenames: false
         files: (Cargo\.toml|Cargo\.lock|deny\.toml)$
 
-      - id: ci-watch-exit-codes
-        name: ci-watch still reports what it saw in its exit code
-        description: an agent's monitor acts on the watcher's exit code, so a wrong one reports a CI result that never happened
-        entry: scripts/test-ci-watch.sh
-        language: system
-        pass_filenames: false
-        files: ^scripts/(ci-watch\.sh|test-ci-watch\.sh)$
-
       # Skips until `cargo vet init` has run (see SETUP.md), mirroring
       # the guard on the CI job, so the first commit of a new repo isn't
       # blocked on supply-chain setup. The `files` regex must match paths

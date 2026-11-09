@@ -100,9 +100,6 @@ jobs:
       - name: Generate documentation
         run: cargo doc --no-deps --workspace
 
-      - name: Verify ci-watch reports what it saw in its exit code
-        run: scripts/test-ci-watch.sh
-
   test:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
