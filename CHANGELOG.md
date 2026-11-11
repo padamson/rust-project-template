@@ -55,7 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - MSRV-job comment on stubbing `include_bytes!` build artifacts via `touch` for downstreams that embed generated files
 - Expanded `cargo vet import` list in SETUP.md to the seven well-known trusted orgs (bytecode-alliance, embark-studios, fermyon, google, isrg, mozilla, zcash), using the named-import form
 - Per-PR workflow documentation in SETUP.md for handling Supply Chain Review failures on Dependabot PRs (never auto-regenerate exemptions in CI; certify vs. regenerate vs. reject)
-- `cargo vet trust` section in SETUP.md covering transitive trust of publishers already certified by imported orgs (seanmonstar, BurntSushi, epage, kennykerr, Lokathor), including `--allow-multiple-publishers` guidance for flagship multi-maintainer packages
+- `cargo vet trust` section in SETUP.md: trust the publishers `cargo vet suggest` says your imported orgs already trust, at `--criteria safe-to-deploy`, rerun with `--allow-multiple-publishers` for a crate with several publishers, and trust `github:<owner>/<repo>` for a crate published through Trusted Publishing. It names no default publishers, since which to trust is the user's call
 - `scripts/mutants.sh` wrapper for `cargo mutants --in-diff`, with project-specific pre-setup placeholder, defaulting to `HEAD~1..HEAD`
 - Two-job mutation-testing setup in `security.yml`: a per-push/PR `mutation-testing-diff` job using `cargo mutants --in-diff` (typical runtime seconds-to-minutes), with `fetch-depth: 0` and PR/push base resolution; and a `mutation-testing` (full) job available via manual `workflow_dispatch` only — full-codebase runs don't scale to be scheduled
 - `## Mutation testing` section in CLAUDE.md covering the local script + CI shape

@@ -300,40 +300,45 @@ If your crate has no third-party dependencies yet, `cargo vet` passes immediatel
 
 ### Transitively trust publishers your imported orgs trust
 
-Bigger leverage on top of imports. The orgs you've imported have
-already certified specific *individual* publishers. `cargo vet trust`
-extends those certifications to your tree — no first-hand audit work.
+The orgs you imported have already named individual publishers they
+trust. `cargo vet trust` extends that trust to your tree, with no audit
+work of your own. Which publishers you trust is your decision, so the
+template ships no list. The steps below find the ones your imports
+already agree on:
 
-Run `cargo vet suggest` to see candidates — it surfaces publishers
-already trusted by 2+ of your imported orgs. High-leverage names to
-apply by default (broadly endorsed, ship widely-used crates):
+1. After the imports, run `cargo vet suggest`. Under a crate it
+   recommends auditing, a `NOTE:` line names any publisher your imported
+   orgs trust (*e.g.*, "isrg, mozilla, and bytecode-alliance trust
+   rust-lang-owner").
+2. Trust each publisher those lines name, at `safe-to-deploy`:
+
+   ```bash
+   cargo vet trust --all <publisher> --criteria safe-to-deploy
+   ```
+
+   Without `--criteria` the command prompts, and it offers the level of
+   the exemptions it replaces. That is `safe-to-run` while the tree holds
+   only dev-dependencies, and `safe-to-run` trust stops covering a crate
+   once it becomes a normal dependency.
+3. A crate with more than one publisher is skipped, with a warning to
+   rerun with `--allow-multiple-publishers` (and an error if nothing else
+   was left to trust). Rerun with the flag. It lets `--all` trust the
+   publisher for any crate they have published even one version of,
+   which can be more than you meant, so read the `[[trusted.*]]` entries
+   it added to `supply-chain/audits.toml` before you commit.
+4. Run `cargo vet` and follow its prompts to exempt what is left.
+
+On the template's own tree (as of November 2026) the trust step takes
+`cargo vet` from 5 audited and 8 exempted to 10 and 3, and in one
+dogfooding run on a real project it took 304 exemptions to 237.
+
+A login stops covering a crate once its owner publishes through
+crates.io Trusted Publishing. `cargo vet` then reports the publisher as
+`github:<owner>/<repo>`, and the login's entry no longer matches the new
+versions. Trust that identity for the crate instead:
 
 ```bash
-cargo vet trust --all seanmonstar    # hyper, reqwest, mime_guess, ...
-cargo vet trust --all BurntSushi     # regex, regex-syntax, csv, ...
-cargo vet trust --all epage          # clap, toml, anstream, ...
-cargo vet trust --all kennykerr      # windows-rs, windows-targets, ...
-cargo vet trust --all Lokathor       # bytemuck, ...
-```
-
-For multi-maintainer flagship packages (clap, tower, windows-*), add
-`--allow-multiple-publishers` so a release by any of the maintainers
-counts (not just the trusted one):
-
-```bash
-cargo vet trust --all epage --allow-multiple-publishers
-cargo vet trust --all seanmonstar --allow-multiple-publishers
-cargo vet trust --all kennykerr --allow-multiple-publishers
-```
-
-In dogfooding on a real project, this took **304 → 237 exemptions**
-(a further 22% reduction on top of imports) with zero audit work.
-
-Then exempt any remaining unaudited dependencies:
-
-```bash
-cargo vet
-# Follow the prompts to exempt crates
+cargo vet trust jiff github:BurntSushi/jiff --criteria safe-to-deploy
 ```
 
 ### Per-PR workflow for unvetted entries
