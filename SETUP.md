@@ -212,6 +212,14 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   publish, because both turn a broken release into a green run with no
   crate.
 
+- [ ] On the same page, tick **Require trusted publishing for all new
+  versions**. The `release` environment and the tag ruleset limit only
+  the tokens this workflow mints. Until the box is ticked, any crates.io
+  API token with publish scope for the crate (one left on a laptop, in an
+  old CI secret, or leaked) still publishes, and ticking it is what makes
+  revoking the first-publish token stick. The cost: a hand `cargo
+  publish` now needs the box unticked first, and ticked again after.
+
 - [ ] Once the crate is on crates.io, tell cargo-vet it is this repo's own
   code. From the first publish on, `cargo vet` matches the path crate to
   the published version and fails every push ("non-crates.io-fetched
