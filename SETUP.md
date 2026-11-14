@@ -272,7 +272,8 @@ sandbox protects, so a session can't do it for you.
 ```bash
 cargo build
 cargo nextest run
-cargo deny check
+cargo deny --workspace check bans licenses sources
+prek run cargo-lockpatrol --all-files
 ```
 
 ### Initialize cargo-vet
@@ -475,7 +476,8 @@ a proc-macro crate, a separate binary), not before.
    archives and picks the CHANGELOG section for the release notes. A crate new to the workspace is published by hand once,
    like the first, before its trusted publisher can exist.
 5. Run `cargo nextest run --workspace`, `cargo clippy --all-targets
-   --all-features -- -D warnings`, `cargo deny check`, and
+   --all-features -- -D warnings`, `cargo deny --workspace check bans
+   licenses sources`, `prek run cargo-lockpatrol --all-files`, and
    `./scripts/mutants.sh --working --list` before committing; the last
    one confirms the mutants config still resolves files.
 

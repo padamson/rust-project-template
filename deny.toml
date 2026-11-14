@@ -1,5 +1,9 @@
 # cargo-deny configuration
-# Run: cargo deny check
+# Run: cargo deny --workspace check bans licenses sources
+# Advisories go through cargo-lockpatrol instead (`prek run cargo-lockpatrol
+# --all-files`), which reads [advisories] below for every tracked Cargo.lock.
+# Plain `cargo deny check` reads the root lockfile alone, so it disagrees
+# with the gate about an ignore entry that only a nested tree uses.
 # Docs: https://embarkstudios.github.io/cargo-deny/
 
 [graph]
@@ -11,8 +15,9 @@ feature-depth = 1
 
 [advisories]
 # The only list of accepted RUSTSEC advisories. CI, the pre-commit hook
-# and the daily advisory monitor all run `cargo deny`, so nothing mirrors
-# this list and nothing can drift from it. Give each entry a reason:
+# and the daily advisory monitor all run cargo-lockpatrol, which reads it
+# here, so nothing mirrors this list and nothing can drift from it. Give
+# each entry a reason:
 #   { id = "RUSTSEC-2026-XXXX", reason = "no fix upstream; not reachable from our call graph" }
 ignore = []
 

@@ -17,11 +17,10 @@ permissions:
   contents: read
 
 jobs:
-  # cargo deny is the single advisory gate (it reads the RustSec database
-  # like `cargo audit` does) as well as the license, bans and sources
-  # check. One tool means one ignore list, in `deny.toml`, that cannot
-  # drift from a mirrored copy here or in the pre-commit hook. Advisories
-  # run through cargo-lockpatrol, which covers every tracked Cargo.lock
+  # cargo deny checks licenses, bans and sources. Advisories run through
+  # cargo-lockpatrol, which reads the one ignore list in `deny.toml` (so
+  # no copy here or in the pre-commit hook can drift from it) and covers
+  # every tracked Cargo.lock
   # rather than the root one alone; `advisory-monitor.yml` runs the same
   # action daily to catch advisories published between pushes. It runs
   # with `locked: root`, so a root Cargo.lock that disagrees with its
