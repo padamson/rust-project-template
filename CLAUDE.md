@@ -161,8 +161,8 @@ step is not a no-op.
 5. Push: `git push origin main --tags`
 
 The tag triggers CI, which checks each crate's semver against its latest
-crates.io release, then builds, tests, creates a GitHub Release, and
-publishes to crates.io. A crate not yet on crates.io skips the semver
+crates.io release, then builds, tests, publishes to crates.io, and
+creates a GitHub Release. A crate not yet on crates.io skips the semver
 check, and a version already there skips the publish; any other answer
 from crates.io fails the run, and so does a tag that no publishable
 crate's version matches. A crate's first version is published by hand,

@@ -159,6 +159,18 @@ To approve each publish by hand, add required reviewers to the
 environment (**Settings > Environments > release**). The script keeps
 reviewers and a wait timer set there.
 
+### Immutable releases
+
+The script turns on immutable releases. A published release then takes
+no new assets and loses none, and its tag can't be moved or deleted, so
+an archive someone downloaded and verified against its attestation stays
+the one at that URL. `release.yml` is built for this: each build job
+uploads its archive as a workflow artifact, and one `release` job, after
+the crates.io publish, creates the release with all of them attached. If
+you change `release.yml`, keep that shape. A workflow in which each build
+job attaches its own archive breaks under the setting: the first job to
+finish publishes the release, and every later upload is refused.
+
 ### Dependabot auto-merge
 
 `dependabot-auto-merge.yml` enables auto-merge with a GitHub App's token.

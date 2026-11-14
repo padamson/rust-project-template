@@ -354,6 +354,17 @@ fix_environment() {
   done <<<"$patterns"
 }
 
+# --- Immutable releases -------------------------------------------------------
+# release.yml attaches every archive in the one call that publishes the
+# release, which is what lets this be on.
+check_immutable_releases() {
+  local out
+  out=$(gh api "repos/$repo/immutable-releases" --jq .enabled 2>&1) || { detail=$out; return 2; }
+  [ "$out" = true ] && return 0
+  detail="off"; return 1
+}
+fix_immutable_releases() { gh_set api -X PUT "repos/$repo/immutable-releases"; }
+
 # --- Required checks have all reported on main --------------------------------
 # A required check that never reports holds every PR forever, so main is
 # protected only once each of them has reported on its HEAD.
@@ -445,6 +456,7 @@ run_item "Dependabot security updates" check_security_updates fix_security_updat
 run_item "CodeQL default setup" check_codeql fix_codeql async
 run_item "Ruleset \"$ruleset_name\" on release.yml's tags" check_ruleset fix_ruleset
 run_item "Environment \"$env_name\" deploys only release.yml's tags" check_environment fix_environment
+run_item "Immutable releases" check_immutable_releases fix_immutable_releases
 run_item "Required checks have reported on main" check_reported ""
 run_item "Branch protection on main" check_protection fix_protection
 run_item "Merge App secrets (Dependabot)" check_app_secrets fix_app_secrets "${app_client_id:+force}"
