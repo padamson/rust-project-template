@@ -242,7 +242,7 @@ jobs:
                        -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate/$version")
             case "$status" in
               200) echo "$crate $version is already on crates.io; skipping it" ;;
-              404) cargo publish -p "$crate" ;;
+              404) cargo publish --locked -p "$crate" ;;
               *)   echo "::error::crates.io answered $status for $crate $version"; exit 1 ;;
             esac
           done < "$RUNNER_TEMP/crates"
