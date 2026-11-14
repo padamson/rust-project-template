@@ -356,7 +356,8 @@ fix_environment() {
 
 # --- Immutable releases -------------------------------------------------------
 # release.yml attaches every archive in the one call that publishes the
-# release, which is what lets this be on.
+# release, which is what lets this be on. GitHub applies the PUT a moment
+# after it returns, so a read straight after it can still say off.
 check_immutable_releases() {
   local out
   out=$(gh api "repos/$repo/immutable-releases" --jq .enabled 2>&1) || { detail=$out; return 2; }
@@ -456,7 +457,7 @@ run_item "Dependabot security updates" check_security_updates fix_security_updat
 run_item "CodeQL default setup" check_codeql fix_codeql async
 run_item "Ruleset \"$ruleset_name\" on release.yml's tags" check_ruleset fix_ruleset
 run_item "Environment \"$env_name\" deploys only release.yml's tags" check_environment fix_environment
-run_item "Immutable releases" check_immutable_releases fix_immutable_releases
+run_item "Immutable releases" check_immutable_releases fix_immutable_releases async
 run_item "Required checks have reported on main" check_reported ""
 run_item "Branch protection on main" check_protection fix_protection
 run_item "Merge App secrets (Dependabot)" check_app_secrets fix_app_secrets "${app_client_id:+force}"
