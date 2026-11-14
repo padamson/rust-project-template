@@ -146,12 +146,12 @@ jobs:
           tool: cargo-nextest
 
       - name: Run tests
-        run: cargo nextest run --workspace --target ${{ matrix.target }}
+        run: cargo nextest run --locked --workspace --target ${{ matrix.target }}
 
       # A failed release build fails the release. A library crate builds
       # here too, and the steps after this one skip when there is no binary.
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --verbose
+        run: cargo build --locked --release --target ${{ matrix.target }} --verbose
 
       - name: Strip binary (Unix)
         if: env.BINARY != '' && runner.os != 'Windows'
