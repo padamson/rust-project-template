@@ -71,14 +71,14 @@ what a pass looks like; CI is the backstop, not the plan.
 
 **Not from a session at all**, changed on github.com or crates.io:
 creating the merge App, installing it on the repo and generating its key,
-Dependabot malware alerts, and the crate's Trusted Publisher (SETUP.md
-has each).
+Dependabot malware alerts, and the crate's Trusted Publisher.
 
 **By eye:**
 
-- Prose a reader will act on: the CHANGELOG entry, README, SETUP.md
-  steps, and the shipped skill under `skills/`. The skill version guard
-  checks the bump, not that the prose is still true.
+- Prose a reader will act on: the CHANGELOG entry, README, the setup
+  checklist while there is one, and the shipped skill under `skills/`.
+  The skill version guard checks the bump, not that the prose is still
+  true.
 - A workflow change: the first run of the changed job on GitHub, since
   nothing local runs it. A job that only fires on a tag, a schedule or a
   Dependabot PR waits for that event, or a `workflow_dispatch` where it
@@ -86,10 +86,9 @@ has each).
 
 ## Agent skills
 
-`skills/my-project/` is the skill this crate ships to consumers (see
-SETUP.md "Agent skill" to ship or delete it). Edits to it must bump
-`metadata.version` in its `SKILL.md`; the pre-commit hook and the
-`Skill version guard` CI job both enforce that.
+`skills/my-project/` is the skill this crate ships to consumers. Edits to
+it must bump `metadata.version` in its `SKILL.md`; the pre-commit hook
+and the `Skill version guard` CI job both enforce that.
 
 Skills of tools this crate depends on are managed installs, not vendored:
 `skills-lock.json` (tracked) records each source and a content hash, and
@@ -166,9 +165,9 @@ crates.io release, then builds, tests, creates a GitHub Release, and
 publishes to crates.io. A crate not yet on crates.io skips the semver
 check, and a version already there skips the publish; any other answer
 from crates.io fails the run, and so does a tag that no publishable
-crate's version matches. A crate's first version is published by hand
-(SETUP.md, "crates.io Trusted Publishing"); its tag then finds that
-version on crates.io and skips the publish.
+crate's version matches. A crate's first version is published by hand,
+since crates.io adds a trusted publisher only to a crate that exists;
+its tag then finds that version on crates.io and skips the publish.
 
 After a crate's first publish (the first release, or a crate new to the
 workspace), add `[policy.<crate>] audit-as-crates-io = false` to

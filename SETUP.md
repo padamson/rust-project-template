@@ -559,11 +559,19 @@ Only run this after every box above is checked and your first feature PR has mer
    - Change `[Unreleased]` to `https://github.com/OWNER/REPO/compare/vX.Y.Z...HEAD`.
    - Add `[X.Y.Z]: https://github.com/OWNER/REPO/releases/tag/vX.Y.Z`.
 3. Update the version in `Cargo.toml` to `X.Y.Z`.
-4. Remove this file and the settings script — you won't need them again:
-   `git rm SETUP.md scripts/github-settings.sh`.
+4. Remove this file and the settings script, which you won't need again,
+   and the "GitHub settings" bullet under `## Manual checks` in
+   `CLAUDE.md`, which runs the script:
+   `git rm SETUP.md scripts/github-settings.sh`. Then check that nothing
+   left in the tree points at either one. This prints nothing when
+   nothing does; fix any line it finds (an edit under `skills/` also
+   bumps that skill's `metadata.version`):
+   ```bash
+   git grep -n -e SETUP -e github-settings -- ':!CHANGELOG.md'
+   ```
 5. Commit, tag, push:
    ```bash
-   git add Cargo.toml CHANGELOG.md
+   git add -u
    git commit -m "Release vX.Y.Z"
    git tag vX.Y.Z
    git push origin main --tags
