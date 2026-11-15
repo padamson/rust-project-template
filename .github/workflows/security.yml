@@ -37,10 +37,17 @@ jobs:
         with:
           toolchain: stable
 
+      # Every install-action step sets `fallback: none`. The default,
+      # `cargo-binstall`, checks no checksum, and it quietly installs a
+      # tool missing from the action's manifest instead of failing. If a
+      # step fails as "not supported", install that tool with `cargo
+      # install --locked` (and `--force` after a cache step that restores
+      # `~/.cargo/bin`) rather than delete the line.
       - name: Install cargo-deny
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-deny
+          fallback: none
 
       # --locked: without it this step re-resolves a stale Cargo.lock in
       # the checkout, and the advisory step below then reads the rewritten
@@ -163,6 +170,7 @@ jobs:
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-semver-checks
+          fallback: none
 
       - name: Check semver against the last release
         if: steps.crates.outputs.any == 'true'
@@ -199,6 +207,7 @@ jobs:
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-nextest
+          fallback: none
 
       # Use prebuilt binary via taiki-e/install-action. `cargo install
       # cargo-mutants` fails when the cargo cache restores a previously
@@ -209,6 +218,7 @@ jobs:
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-mutants
+          fallback: none
 
       # Scope and speed come from `.cargo/mutants.toml`, the only path
       # cargo-mutants reads; it ships live so a fresh clone never runs
@@ -252,6 +262,7 @@ jobs:
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-nextest
+          fallback: none
 
       # Use prebuilt binary via taiki-e/install-action. `cargo install
       # cargo-mutants` fails when the cargo cache restores a previously
@@ -262,6 +273,7 @@ jobs:
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
           tool: cargo-mutants
+          fallback: none
 
       # If a job ever needs a tool built from a git branch (a fork, or a
       # producer's `main` you are dogfooding), resolve the branch to a
