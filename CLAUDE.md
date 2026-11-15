@@ -161,17 +161,20 @@ step is not a no-op.
 5. Push: `git push origin main --tags`
 
 The tag triggers CI, which checks each crate's semver against its latest
-crates.io release, then builds, tests, publishes to crates.io, and
-creates a GitHub Release. A crate not yet on crates.io skips the semver
-check, and a version already there skips the publish; any other answer
-from crates.io fails the run, and so does a tag that no publishable
-crate's version matches. A crate's first version is published by hand,
-since crates.io adds a trusted publisher only to a crate that exists;
-its tag then finds that version on crates.io and skips the publish.
+crates.io release, then builds and tests while it runs `cargo deny` and
+`cargo vet` on the tagged commit (by calling `security.yml`), publishes
+to crates.io only once both have passed, and creates a GitHub Release.
+A crate not yet on crates.io skips the semver check, and a version
+already there skips the publish; any other answer from crates.io fails
+the run, and so does a tag that no publishable crate's version matches.
 
-After a crate's first publish (the first release, or a crate new to the
-workspace), add `[policy.<crate>] audit-as-crates-io = false` to
-`supply-chain/config.toml`. Until it is there, `cargo vet` matches the
-path crate to its crates.io version and fails every push.
+A crate's first version is published by hand, since crates.io adds a
+trusted publisher only to a crate that exists. Then add `[policy.<crate>]
+audit-as-crates-io = false` to `supply-chain/config.toml`, commit it, and
+tag that commit, not the one you published from. Without the policy,
+`cargo vet` matches the path crate to its crates.io version and fails
+every push, and the tag's vet gate with it. The tag's run then finds the
+version on crates.io, skips the publish, and creates the GitHub Release.
+A crate new to the workspace gets the same order.
 
 <!-- Add custom skills under .claude/skills/ as needed -->

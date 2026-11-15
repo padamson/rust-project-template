@@ -238,7 +238,9 @@ GitHub's OIDC identity for this repo and this workflow. There is no
   code. From the first publish on, `cargo vet` matches the path crate to
   the published version and fails every push ("non-crates.io-fetched
   packages match published crates.io versions") until the crate has a
-  policy. Add to `supply-chain/config.toml`, once per published crate:
+  policy, and so does the vet gate on its release tag. Add to
+  `supply-chain/config.toml`, once per published crate, and tag the
+  commit that adds it, not the one you published from:
 
   ```toml
   [policy.<crate>]

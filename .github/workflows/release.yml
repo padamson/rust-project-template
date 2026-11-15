@@ -194,9 +194,21 @@ jobs:
             *.zip
           if-no-files-found: error
 
+  # cargo deny and cargo vet on the tagged commit, run by calling
+  # security.yml, so the gates are defined once and nothing publishes
+  # unless they pass here. They read advisories and imported audits when
+  # this job runs, not when the push put the commit on main, so a re-run
+  # reads them again. Runs beside the build matrix.
+  supply-chain-gates:
+    name: Supply-chain gates
+    needs: [semver-checks]
+    uses: ./.github/workflows/security.yml
+    with:
+      gates-only: true
+
   publish-crates:
     name: Publish to crates.io
-    needs: [build-release]
+    needs: [build-release, supply-chain-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Only release tags can deploy here, and the crates.io publisher names
