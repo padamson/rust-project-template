@@ -55,7 +55,9 @@ drift), or `manual` (no API it can use). It exits 0 when nothing is
   edit files under `.github/workflows/`. Note the **Client ID**.
 - [ ] **Install the App** on this repo: the App's page > **Install App** >
   your account > **Only select repositories**. Then, on the App's page,
-  generate a private key for this repo and save the `.pem`.
+  generate a new private key and save the `.pem`. A key belongs to the
+  App, not to a repo, and mints tokens for every repo the App is installed
+  on.
 - [ ] **Run the script with `--apply` and the App's flags**, then once
   more with no flags. A pass is exit 0 with only `ok` and `manual` lines.
 - [ ] **Turn on Dependabot malware alerts**, which the script cannot
@@ -64,8 +66,8 @@ drift), or `manual` (no API it can use). It exits 0 when nothing is
 - [ ] **Delete the local `.pem`** once the secret is set. Don't delete the
   key on the App's page: every other repo the App is installed on holds
   that key as its secret, and deleting it breaks auto-merge in all of
-  them. An App holds several keys at once, so a new repo gets a new key.
-  To retire a key on purpose, set the new one as the secret in every repo
+  them. An App holds several keys at once, so generating one for each repo
+  you set up means you never need an old `.pem` back. To retire a key on purpose, set the new one as the secret in every repo
   first (the script with `--apply` and the App's flags writes the secrets
   even when they exist), then delete the old one.
 - [ ] **Never add the App to the branch protection bypass list.** Its
