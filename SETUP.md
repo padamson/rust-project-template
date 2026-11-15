@@ -497,70 +497,186 @@ a proc-macro crate, a separate binary), not before.
 
 For a binary people install from source (`cargo install --git`, or
 `--path`), make `--version` say which commit it was built from when it
-is not a tagged release. Three cases: no git available (a crates.io
-install) prints the bare crate version; HEAD exactly at the tag
-`v<version>` prints the bare version, since that is the release; anything
-else prints `<version> (<short sha>)`. No dirty-tree marker: nothing
-re-runs the build script on an uncommitted edit, so it would be wrong as
-often as right.
+is not a tagged release. Three cases: outside a git checkout (a crates.io
+install) it prints the bare crate version; at a commit carrying the tag
+`v<version>` it prints the bare version, since that is the release;
+anything else prints `<version> (<short sha>)`. No dirty-tree marker:
+nothing re-runs the build script on an uncommitted edit, so it would be
+wrong as often as right.
 
-Add a `build.rs`:
+The decision is a pure function that `build.rs` and a test both include,
+so it is tested without git. Add `build/build_id.rs`:
 
 ```rust
-fn main() {
-    let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
-    let build_id = match git_short_sha() {
-        Some(sha) if !at_release_tag(&version) => format!("{version} ({sha})"),
-        _ => version,
-    };
-    println!("cargo:rustc-env=CRATE_VERSION_WITH_BUILD={build_id}");
+//! Shared by `build.rs` and `tests/build_id.rs`, so the decision is tested
+//! without running git.
 
-    // Freshness: `.git/HEAD` covers checkouts and branch switches; the
-    // branch's ref file covers commits. Use `../../.git` from a workspace
-    // member.
-    let git_dir = std::path::Path::new(".git");
-    if !git_dir.exists() {
-        return;
+/// The version `--version` prints: `version`, with the commit `sha`
+/// appended unless `v<version>` is among the tags at HEAD, which makes it
+/// the release. No `sha` means no git (a crates.io install), and prints the
+/// bare version.
+pub fn build_id(version: &str, sha: Option<&str>, tags_at_head: &[&str]) -> String {
+    let release_tag = format!("v{version}");
+    match sha {
+        Some(sha) if !tags_at_head.contains(&release_tag.as_str()) => {
+            format!("{version} ({sha})")
+        }
+        _ => version.to_string(),
     }
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
-        && let Some(reference) = head.strip_prefix("ref: ")
-        && git_dir.join(reference.trim()).exists()
-    {
-        println!("cargo:rerun-if-changed=.git/{}", reference.trim());
-    }
-}
-
-fn git_short_sha() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let sha = String::from_utf8(out.stdout).ok()?.trim().to_string();
-    (!sha.is_empty()).then_some(sha)
-}
-
-fn at_release_tag(version: &str) -> bool {
-    std::process::Command::new("git")
-        .args(["describe", "--exact-match", "--tags", "HEAD"])
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .is_some_and(|tag| tag.trim() == format!("v{version}"))
 }
 ```
 
-With clap derive: `#[command(version = env!("CRATE_VERSION_WITH_BUILD"))]`.
+and `build.rs`:
 
-Test the shape, not the environment, so the same test passes in a dev
-checkout and in a tagged release build: the output starts with
-`CARGO_PKG_VERSION`, and any suffix matches exactly ` (<7+ hex digits>)`.
+```rust
+//! Makes `--version` name the commit a binary was built from when it is
+//! not the tagged release, so a build from `main` (`cargo install --git`)
+//! can be told from the release it follows.
+
+#[path = "build/build_id.rs"]
+mod build_id;
+
+use std::path::Path;
+use std::process::{Command, Stdio};
+
+fn main() {
+    let version = env!("CARGO_PKG_VERSION");
+    // With no rerun-if-changed at all, cargo re-runs this script whenever
+    // any file in the package changes.
+    println!("cargo:rerun-if-changed=build.rs");
+
+    // Only this crate's own checkout (`.git` is a file in a worktree).
+    // Without the check, git walks up to any repository around the crate,
+    // a home directory under git or a project that vendors it, and reports
+    // that one's HEAD.
+    let in_checkout = Path::new(".git").exists();
+    let Some(sha) = in_checkout
+        .then(|| git(&["rev-parse", "--short", "HEAD"]))
+        .flatten()
+    else {
+        if in_checkout {
+            println!(
+                "cargo:warning=git could not read HEAD in this checkout; --version prints the bare version"
+            );
+        }
+        println!(
+            "cargo:rustc-env=CRATE_VERSION_WITH_BUILD={}",
+            build_id::build_id(version, None, &[])
+        );
+        return;
+    };
+
+    // Every tag at HEAD: `git describe --exact-match` reports one and
+    // prefers an annotated tag, so it misses a lightweight release tag
+    // beside one.
+    let tags = git(&["tag", "--points-at", "HEAD"]).unwrap_or_default();
+    let tags: Vec<&str> = tags.lines().collect();
+    println!(
+        "cargo:rustc-env=CRATE_VERSION_WITH_BUILD={}",
+        build_id::build_id(version, Some(&sha), &tags)
+    );
+
+    // Re-run on a checkout (HEAD), a commit (a loose branch ref, or
+    // packed-refs once gc has packed it), and a new tag. The two ref
+    // directories are watched whole because the file a commit or a release
+    // tag writes may not exist yet. `--git-path` resolves each in a
+    // worktree too. A path that does not exist is left out, since cargo
+    // re-runs on every build for one.
+    let paths = git(&[
+        "rev-parse",
+        "--git-path",
+        "HEAD",
+        "--git-path",
+        "packed-refs",
+        "--git-path",
+        "refs/heads",
+        "--git-path",
+        "refs/tags",
+    ])
+    .unwrap_or_default();
+    for path in paths.lines().filter(|p| Path::new(p).exists()) {
+        println!("cargo:rerun-if-changed={path}");
+    }
+}
+
+/// Trimmed stdout of a git command that succeeded and printed something.
+fn git(args: &[&str]) -> Option<String> {
+    let out = Command::new("git")
+        .args(args)
+        .stderr(Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let text = String::from_utf8(out.stdout).ok()?.trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+```
+
+In a workspace member, check for the repository root's `.git` instead
+(`../../.git` from `crates/<name>/`). With clap derive:
+`#[command(version = env!("CRATE_VERSION_WITH_BUILD"))]`.
+
+Test the decision in `tests/build_id.rs`, which includes the same file:
+
+```rust
+#[path = "../build/build_id.rs"]
+mod build_id;
+
+use build_id::build_id;
+
+#[test]
+fn a_build_without_git_prints_the_bare_version() {
+    assert_eq!(build_id("0.1.0", None, &[]), "0.1.0");
+}
+
+#[test]
+fn a_commit_off_any_tag_prints_its_sha() {
+    assert_eq!(build_id("0.1.0", Some("abc1234"), &[]), "0.1.0 (abc1234)");
+}
+
+#[test]
+fn the_release_tag_prints_the_bare_version() {
+    assert_eq!(build_id("0.1.0", Some("abc1234"), &["v0.1.0"]), "0.1.0");
+}
+
+#[test]
+fn the_release_tag_among_others_prints_the_bare_version() {
+    assert_eq!(
+        build_id("0.1.0", Some("abc1234"), &["latest", "v0.1.0"]),
+        "0.1.0"
+    );
+}
+
+#[test]
+fn a_tag_for_another_version_still_prints_the_sha() {
+    assert_eq!(
+        build_id("0.1.0", Some("abc1234"), &["v0.0.9"]),
+        "0.1.0 (abc1234)"
+    );
+}
+```
+
+No test sees what git told the build script, so check the shipped
+binary in `release.yml`, after "Build release binary", on the one leg
+whose binary is native to its runner. It expects `--version` to print
+`<binary> <version>`, which clap does when the command's name is the
+binary's:
+
+```yaml
+      - name: Check the release binary reports the bare version
+        if: env.BINARY != '' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          got=$("target/${{ matrix.target }}/release/$BINARY" --version)
+          want="$BINARY ${GITHUB_REF_NAME#v}"
+          if [ "$got" != "$want" ]; then
+            echo "::error::--version printed '$got', expected '$want'"
+            exit 1
+          fi
+```
+
+`examine_globs` in `.cargo/mutants.toml` covers `src/` only, so no
+mutation run reaches `build_id`. Mutate it by hand (drop the tag check, and negate it) and
+confirm a test fails each time.
 
 ## Release ceremony (final step — cut vX.Y.Z)
 
