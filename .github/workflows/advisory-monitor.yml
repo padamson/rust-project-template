@@ -47,7 +47,7 @@ jobs:
       # install --locked` (and `--force` after a cache step that restores
       # `~/.cargo/bin`) rather than delete the line.
       - name: Install cargo-deny
-        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-deny
           fallback: none
@@ -56,7 +56,7 @@ jobs:
       # every tree is clean, and fails the job on a broken check. Triage
       # goes in comments: the action rewrites the body.
       - name: Check advisories and keep the tracking issue current
-        uses: padamson/cargo-lockpatrol@dd236f9ba1cce97d3cde4b739b7819d76927412f # v0.1.0
+        uses: padamson/cargo-lockpatrol@40075b2231e33e8f0a6d08f39acd0691e1f3efba # v0.1.1
         # The title and label the open issue was filed under, named here so
         # a release that changes the action's defaults still finds it.
         with:
