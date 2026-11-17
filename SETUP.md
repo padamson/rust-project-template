@@ -337,7 +337,14 @@ already agree on:
    recommends auditing, a `NOTE:` line names any publisher your imported
    orgs trust (*e.g.*, "isrg, mozilla, and bytecode-alliance trust
    rust-lang-owner").
-2. Trust each publisher those lines name, at `safe-to-deploy`:
+2. Check that the trust is still current. The `NOTE:` counts every
+   `[[trusted.*]]` entry an import has for the publisher, including ones
+   whose `end` date has passed. Open the `audits.toml` at the `url` of
+   the import's `[imports.<name>]` entry in `supply-chain/config.toml`
+   and read the publisher's `end`. A lapsed entry is not a reason to
+   trust; trusting that publisher anyway is your own call, and the commit
+   that adds it should say why.
+3. Trust each publisher whose entry is current, at `safe-to-deploy`:
 
    ```bash
    cargo vet trust --all <publisher> --criteria safe-to-deploy
@@ -347,13 +354,13 @@ already agree on:
    the exemptions it replaces. That is `safe-to-run` while the tree holds
    only dev-dependencies, and `safe-to-run` trust stops covering a crate
    once it becomes a normal dependency.
-3. A crate with more than one publisher is skipped, with a warning to
+4. A crate with more than one publisher is skipped, with a warning to
    rerun with `--allow-multiple-publishers` (and an error if nothing else
    was left to trust). Rerun with the flag. It lets `--all` trust the
    publisher for any crate they have published even one version of,
    which can be more than you meant, so read the `[[trusted.*]]` entries
    it added to `supply-chain/audits.toml` before you commit.
-4. Run `cargo vet` and follow its prompts to exempt what is left.
+5. Run `cargo vet` and follow its prompts to exempt what is left.
 
 On the template's own tree (as of November 2026) the trust step takes
 `cargo vet` from 5 audited and 8 exempted to 10 and 3, and in one
