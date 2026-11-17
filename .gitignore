@@ -23,6 +23,8 @@ Thumbs.db
 # points are symlinks into .agents/, and a tracked symlink would dangle in
 # any clone that has not run the install. A crate that uses its own shipped
 # skill in-repo adds `!/.claude/skills/<name>` here and tracks that one
-# symlink, whose target lives under skills/.
+# symlink, whose target lives under skills/. The `/*` ignores the
+# directory's entries rather than the directory, since git cannot
+# re-include a path under an ignored directory.
 /.agents/
-/.claude/skills/
+/.claude/skills/*
