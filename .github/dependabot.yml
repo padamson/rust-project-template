@@ -89,10 +89,9 @@ updates:
           - "actions/create-github-app-token"
 
   # Hook revs in .pre-commit-config.yaml, cargo-lockpatrol's among them.
-  # cargo-lockpatrol's action pin moves in the actions PR above and its
-  # hook rev in this one, so the commit hook and the CI gate can sit a
-  # release apart until both have merged. Only default-days, as for
-  # github-actions.
+  # cargo-lockpatrol's hook rev moves here, its monitor and CI gate pins in
+  # the actions PR above, so they can sit a release apart for a while.
+  # Only default-days, as for github-actions.
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:

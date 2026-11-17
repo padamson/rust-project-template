@@ -101,11 +101,13 @@ classic omission) means a bump merges with that job red.
 - `MSRV Check` — cheap; catches accidental use of post-MSRV features
 - `Lint` — fmt, clippy, doctest, cargo doc (ubuntu-only)
 - `Test on ubuntu-latest`, `Test on macos-latest`, `Test on windows-latest`
-- `License & Dependency Check`, `Supply Chain Review`
-- `Mutation Testing (diff)`, `Skill version guard`
+- `supply-chain / License & Dependency Check`, `supply-chain / Supply Chain Review`
+- `mutation / Mutation Testing (diff)`, `Skill version guard`
 
-`Semver preview` stays off the list. It is the early warning for the
-release's semver gate, and on 0.x a deliberate breaking change turns it
+The `supply-chain /` and `mutation /` prefixes are the calling jobs in
+`security.yml`; the jobs themselves live in `padamson/rust-ci-workflows`.
+`semver-preview / Semver preview` stays off the list. It is the early
+warning for the release's semver gate, and on 0.x a deliberate breaking change turns it
 red until the release that bumps the version, which would block every
 merge in between. `dependabot-auto-merge.yml`'s two jobs, `Hold a PR that
 edits this workflow` and `Enable auto-merge`, stay off too: they are the

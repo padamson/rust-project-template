@@ -120,9 +120,9 @@ repos:
         pass_filenames: false
         files: ^skills/
 
-  # Builds the binary at the pinned rev (prek runs `cargo install`), so
-  # the hook is the release the CI gate and the monitor run. Needs
-  # cargo-deny on PATH. Dependabot's pre-commit entry moves this rev.
+  # Builds the binary at the pinned rev (prek runs `cargo install`). Keep
+  # it at the release the monitor and the CI gate run. Needs cargo-deny on
+  # PATH. Dependabot's pre-commit entry moves this rev.
   - repo: https://github.com/padamson/cargo-lockpatrol
     rev: dd236f9ba1cce97d3cde4b739b7819d76927412f  # frozen: v0.1.0
     hooks:

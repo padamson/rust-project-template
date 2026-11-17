@@ -194,17 +194,13 @@ jobs:
             *.zip
           if-no-files-found: error
 
-  # cargo deny and cargo vet on the tagged commit, run by calling
-  # security.yml, so the gates are defined once and nothing publishes
-  # unless they pass here. They read advisories and imported audits when
-  # this job runs, not when the push put the commit on main, so a re-run
-  # reads them again. Runs beside the build matrix.
+  # cargo deny and cargo vet on the tagged commit, at the pin security.yml
+  # uses; nothing publishes unless they pass. They read advisories and
+  # imported audits when this job runs, so a re-run reads them again.
   supply-chain-gates:
     name: Supply-chain gates
     needs: [semver-checks]
-    uses: ./.github/workflows/security.yml
-    with:
-      gates-only: true
+    uses: padamson/rust-ci-workflows/.github/workflows/supply-chain.yml@bc82a9327da289a29ae5f0c32b0cd94786e0d1f9 # v0.1.0
 
   publish-crates:
     name: Publish to crates.io

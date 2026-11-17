@@ -46,7 +46,8 @@ cd "$REPO_ROOT"
 # Anything the build expects but that isn't checked in (wasm-pack
 # artifacts referenced via include_str!/include_bytes!, generated FFI
 # bindings, etc.) won't follow. Mutation testing doesn't exercise those
-# bytes at runtime, so empty placeholders are enough.
+# bytes at runtime, so empty placeholders are enough. CI does not run
+# this script, so the same lines go in `security.yml`'s `setup` input.
 #
 # Example (delete or adapt for your project):
 #   mkdir -p crates/foo-viz/pkg

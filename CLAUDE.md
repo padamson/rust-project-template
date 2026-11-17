@@ -125,10 +125,12 @@ Run one mutation job at a time; every run writes `mutants.out/`. A
 stray run is stopped with `pkill -f cargo-mutants` (hyphen; the binary
 is `cargo-mutants`).
 
-CI runs the per-diff variant on every push and PR (`mutation-testing-diff`
-in `security.yml`). The full-codebase job (`mutation-testing`) is
-manual-only via `workflow_dispatch` — use it for occasional audits or
-big refactors, never on a schedule.
+CI runs the per-diff variant on every push and PR, and the full-codebase
+sweep only on `workflow_dispatch` — use it for occasional audits or big
+refactors, never on a schedule. Both come from `security.yml`'s
+`mutation` job, which calls `mutation.yml` in `padamson/rust-ci-workflows`.
+The CI diff job computes its own diff and runs `cargo mutants --in-diff`
+directly, not this script.
 
 Scope the baseline with `.cargo/mutants.toml`, which ships live (a
 `.mutants.toml` at the repo root is ignored silently); `--in-diff`
@@ -162,7 +164,8 @@ step is not a no-op.
 
 The tag triggers CI, which checks each crate's semver against its latest
 crates.io release, then builds and tests while it runs `cargo deny` and
-`cargo vet` on the tagged commit (by calling `security.yml`), publishes
+`cargo vet` on the tagged commit (by calling the shared `supply-chain.yml`
+that `security.yml` also calls), publishes
 to crates.io only once both have passed, and creates a GitHub Release.
 A crate not yet on crates.io skips the semver check, and a version
 already there skips the publish; any other answer from crates.io fails
