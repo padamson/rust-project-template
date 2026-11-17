@@ -491,7 +491,10 @@ a proc-macro crate, a separate binary), not before.
    and its own `audit-as-crates-io = false` policy. A `v*` tag releases
    every publishable crate whose version is not yet on crates.io; the
    tag's version has to match at least one of them, and it names the
-   archives and picks the CHANGELOG section for the release notes. A crate new to the workspace is published by hand once,
+   archives and picks the CHANGELOG section for the release notes. Each
+   crate at the tag's version must require its workspace siblings at
+   their full current versions (`version = "0.4.1"`, not `"0.4"`), or the
+   release fails before it builds. A crate new to the workspace is published by hand once,
    like the first, before its trusted publisher can exist.
 5. Run `cargo nextest run --workspace`, `cargo clippy --all-targets
    --all-features -- -D warnings`, `cargo deny --workspace check bans

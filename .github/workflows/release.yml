@@ -19,14 +19,13 @@ permissions:
   contents: read
 
 jobs:
-  # Each publishable crate against its latest crates.io release: a breaking
-  # change under a version that does not allow one fails here, before
-  # anything is built or published. On 0.x a minor bump (0.1 to 0.2)
-  # allows one.
-  semver-checks:
-    name: Semver Compatibility
+  # The hand-written version numbers, checked before anything else runs. A
+  # mistake here fails the release in under a minute, instead of after the
+  # tests have run on every platform.
+  release-refs:
+    name: Release references
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     outputs:
       binary: ${{ steps.binary.outputs.name }}
     steps:
@@ -46,6 +45,29 @@ jobs:
             exit 1
           fi
 
+      # Each crate at the tag's version must require each workspace sibling
+      # at that sibling's full current version (`^0.4.1` or `0.4.1`, not
+      # `0.4` or `~0.4.1`). A stale `version = "0.4.0"` on a path dependency
+      # publishes a 0.4.1 that a consumer can build against the old sibling,
+      # which fails if 0.4.1 uses anything the sibling added. Cargo itself
+      # refuses the stale line only across an incompatible bump (a minor one
+      # on 0.x, a major one from 1.0). Dev-dependencies are left out:
+      # publishing strips them. A crate the publish step releases at a
+      # version other than the tag's is not checked. No-op in a single-crate
+      # repo.
+      - name: Check the workspace siblings' required versions
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          cargo metadata --no-deps --format-version 1 | jq -r -e --arg v "$tag" '
+            (.packages | map({(.name): .version}) | add) as $ver
+            | [ .packages[] | select(.publish != [] and .version == $v) as $p
+                | $p.dependencies[]
+                | select(.path != null and .kind != "dev" and $ver[.name] != null)
+                | select((.req | ltrimstr("^") | ltrimstr("=")) != $ver[.name])
+                | "\($p.name) requires \(.name) \(.req), which is at \($ver[.name])" ]
+            | if length > 0 then (.[] | "::error::" + .), false else true end'
+
       # The binary the build jobs archive: the first binary target of a
       # publishable crate, or empty for a library crate, which releases
       # with no archives. Read once here, where jq is known to be on the
@@ -58,6 +80,17 @@ jobs:
                    | jq -r '[.packages[] | select(.publish != []) | .targets[] | select(.kind | index("bin")) | .name] | first // empty')
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "binary to archive: ${name:-none (library crate)}"
+
+  # Each publishable crate against its latest crates.io release: a breaking
+  # change under a version that does not allow one fails here, before
+  # anything is published. On 0.x a minor bump (0.1 to 0.2) allows one.
+  semver-checks:
+    name: Semver Compatibility
+    needs: [release-refs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
@@ -84,6 +117,15 @@ jobs:
       # with no semver check at all. The loop reads the crate list on stdin,
       # so the check (or a git fetch it starts) is kept off it, or it could
       # swallow the crates after the first.
+      #
+      # Both crates.io probes in this file use the same curl flags; change
+      # them together. `--retry`
+      # alone does not retry a refused or reset connection or a failed DNS
+      # lookup, so `--retry-all-errors` does; a 404 is not a curl error
+      # without `-f`, so it is answered once. `--max-time` ends each stalled
+      # attempt at 30 seconds instead of letting it wait out the job. A connection that still fails
+      # prints `000`, and `|| true` lets it reach the `*)` arm and its error
+      # line instead of `set -e` ending the step with a bare exit code.
       - name: Check semver compatibility
         env:
           USER_AGENT: ${{ github.repository }} release workflow (https://github.com/${{ github.repository }})
@@ -95,8 +137,8 @@ jobs:
             | while read -r crate; do echo "$crate has no library target; nothing to semver-check"; done
           jq -r ".packages[] | select(.publish != []) | select($has_lib) | .name" <<< "$metadata" > "$RUNNER_TEMP/crates"
           while read -r crate; do
-            status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 \
-                       -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate")
+            status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors \
+                       --max-time 30 -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate" || true)
             case "$status" in
               200) cargo semver-checks check-release -p "$crate" </dev/null ;;
               404) echo "$crate is not on crates.io yet; nothing to compare against" ;;
@@ -106,7 +148,7 @@ jobs:
 
   build-release:
     name: Build ${{ matrix.target }}
-    needs: [semver-checks]
+    needs: [release-refs]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # No `contents: write`: the release job alone creates the release.
@@ -115,7 +157,7 @@ jobs:
       id-token: write       # provenance attestation
       attestations: write
     env:
-      BINARY: ${{ needs.semver-checks.outputs.binary }}
+      BINARY: ${{ needs.release-refs.outputs.binary }}
     strategy:
       fail-fast: false
       matrix:
@@ -199,12 +241,12 @@ jobs:
   # imported audits when this job runs, so a re-run reads them again.
   supply-chain-gates:
     name: Supply-chain gates
-    needs: [semver-checks]
+    needs: [release-refs]
     uses: padamson/rust-ci-workflows/.github/workflows/supply-chain.yml@bc82a9327da289a29ae5f0c32b0cd94786e0d1f9 # v0.1.0
 
   publish-crates:
     name: Publish to crates.io
-    needs: [build-release, supply-chain-gates]
+    needs: [semver-checks, build-release, supply-chain-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Only release tags can deploy here, and the crates.io publisher names
@@ -240,11 +282,12 @@ jobs:
       # publisher can only be added to a crate that exists, so the first
       # tag finds its version already there. That case and a rerun are
       # skipped with a line saying so, but only on a 200; a 404 publishes
-      # and any other answer fails the job. The tag check in semver-checks
-      # is what keeps a forgotten version bump from landing here as a skip. Each crate is checked at its
-      # own version. A workspace whose crates depend on each other must
-      # publish them in dependency order, which `cargo metadata` does not
-      # guarantee: list them by hand here.
+      # and any other answer fails the job. The tag check in release-refs
+      # is what keeps a forgotten version bump from landing here as a skip.
+      # Each crate is checked at its own version, with the probe described
+      # at the semver check. A workspace whose crates depend on each other
+      # must publish them in dependency order, which `cargo metadata` does
+      # not guarantee: list them by hand here.
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
@@ -254,8 +297,8 @@ jobs:
           cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"' > "$RUNNER_TEMP/crates"
           while read -r crate version; do
-            status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 \
-                       -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate/$version")
+            status=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors \
+                       --max-time 30 -A "$USER_AGENT" "https://crates.io/api/v1/crates/$crate/$version" || true)
             case "$status" in
               200) echo "$crate $version is already on crates.io; skipping it" ;;
               404) cargo publish --locked -p "$crate" ;;
@@ -271,13 +314,13 @@ jobs:
   # could not be retried under the same version.
   release:
     name: Create the GitHub Release
-    needs: [semver-checks, publish-crates]
+    needs: [release-refs, publish-crates]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write       # create the GitHub Release and attach files
     env:
-      BINARY: ${{ needs.semver-checks.outputs.binary }}
+      BINARY: ${{ needs.release-refs.outputs.binary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

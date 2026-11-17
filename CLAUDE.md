@@ -162,14 +162,17 @@ step is not a no-op.
 4. Tag: `git tag vX.Y.Z`
 5. Push: `git push origin main --tags`
 
-The tag triggers CI, which checks each crate's semver against its latest
-crates.io release, then builds and tests while it runs `cargo deny` and
-`cargo vet` on the tagged commit (by calling the shared `supply-chain.yml`
-that `security.yml` also calls), publishes
-to crates.io only once both have passed, and creates a GitHub Release.
+The tag triggers CI, which first checks the hand-written versions: a tag
+that no publishable crate's version matches fails the run, and so does a
+released crate that requires a workspace sibling at anything but the
+sibling's current version. Then, side by side, it checks each crate's
+semver against its latest crates.io release, builds and tests, and runs
+`cargo deny` and `cargo vet` on the tagged commit (by calling the shared
+`supply-chain.yml` that `security.yml` also calls). It publishes to
+crates.io only once all of them have passed, and creates a GitHub Release.
 A crate not yet on crates.io skips the semver check, and a version
 already there skips the publish; any other answer from crates.io fails
-the run, and so does a tag that no publishable crate's version matches.
+the run.
 
 A crate's first version is published by hand, since crates.io adds a
 trusted publisher only to a crate that exists. Then add `[policy.<crate>]
